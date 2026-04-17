@@ -1,0 +1,1863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Three Bird Nest · 2026 Promo Planner v4</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// ── Firebase — loaded via dynamic import (works in regular script context) ────
+(function(){
+  const firebaseConfig = {
+    apiKey: "AIzaSyAdXHlwWIbJhZsdvommjAwtRTixra73AAU",
+    authDomain: "tbn-promo-forecaster.firebaseapp.com",
+    projectId: "tbn-promo-forecaster",
+    storageBucket: "tbn-promo-forecaster.firebasestorage.app",
+    messagingSenderId: "1048335708859",
+    appId: "1:1048335708859:web:3a9efa8b51c911f77a6f9e"
+  };
+
+  function setStatus(msg, color){
+    var el=document.getElementById('sync-status');
+    if(el){el.textContent=msg;el.style.color=color;}
+  }
+
+  Promise.all([
+    import("https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js"),
+    import("https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js")
+  ]).then(function(modules){
+    var initializeApp = modules[0].initializeApp;
+    var getFirestore = modules[1].getFirestore;
+    var doc = modules[1].doc;
+    var getDoc = modules[1].getDoc;
+    var setDoc = modules[1].setDoc;
+    var onSnapshot = modules[1].onSnapshot;
+
+    var fbApp = initializeApp(firebaseConfig);
+    var db = getFirestore(fbApp);
+    var PLAN_REF = doc(db, 'tbn2026', 'planner');
+
+    // Write to Firestore — called by lsSet
+    window.fbSetFn = function(key, val){
+      setDoc(PLAN_REF, {[key]: val}, {merge: true})
+        .catch(function(e){console.warn('Firestore write:', e);});
+    };
+
+    // Load from Firestore on startup
+    function fbLoad(){
+      getDoc(PLAN_REF).then(function(snap){
+        if(snap.exists()){
+          var d = snap.data();
+          if(d.ev){evSel=d.ev;}
+          if(d.ua){userAct=d.ua;}
+          if(d.ug){userGoals=d.ug;}
+          if(d.lp){lockedProj=d.lp;}
+          if(d.un){userNotes=d.un;}
+          console.log('Loaded from Firestore ✓', Object.keys(d.ua||{}).length, 'actuals');
+        } else {
+          console.log('No Firestore data yet — will save on first entry');
+        }
+        setStatus('● Live', '#8FCA5A');
+        // Rebuild UI with Firestore data
+        try{recalcBaseline();}catch(e){}
+        buildOverview();buildPlanner();buildBenchmarks();updateAnnual();
+        if(_chartsBuilt)_updateCharts();
+      }).catch(function(e){
+        console.warn('Firestore load error:', e);
+        setStatus('○ Offline (localStorage)', '#F09595');
+      });
+    }
+
+    // Real-time listener — updates from other team members
+    var _firstSnapshot = true;
+    onSnapshot(PLAN_REF, function(snap){
+      if(_firstSnapshot){_firstSnapshot=false;return;} // skip initial load (handled by fbLoad)
+      if(!snap.exists()) return;
+      var d = snap.data();
+      if(d.ev) evSel=d.ev;
+      if(d.ua) userAct=d.ua;
+      if(d.ug) userGoals=d.ug;
+      if(d.lp) lockedProj=d.lp;
+      if(d.un) userNotes=d.un;
+          if(d.umg){userMonthGoals=d.umg;Object.keys(d.umg).forEach(function(m){MONTH_GOALS[parseInt(m)]=d.umg[m];});}
+      try{recalcBaseline();}catch(e){}
+      buildOverview();buildPlanner();if(curActTab)buildActualsTab(actFilterMon);
+      updateAnnual();if(_chartsBuilt)_updateCharts();
+      setStatus('● Live', '#8FCA5A');
+    }, function(err){
+      console.warn('Firestore snapshot error:', err);
+      setStatus('○ Offline', '#F09595');
+    });
+
+    // Start load
+    fbLoad();
+
+  }).catch(function(e){
+    console.warn('Firebase failed to load:', e);
+    setStatus('○ Offline (localStorage)', '#aaa');
+  });
+})();
+</script>
+<style>
+:root{--cream:#FAF8F4;--sand:#F0EDE6;--tan:#D9D2C5;--bark:#8C7B6B;--esp:#3D2E22;--char:#2C2C2A;--forest:#3B6D11;--flt:#EAF3DE;--sky:#185FA5;--sklt:#E6F1FB;--amb:#BA7517;--amlt:#FAEEDA;--rose:#A32D2D;--rslt:#FCEBEB;--bd:rgba(61,46,34,0.12);--bdm:rgba(61,46,34,0.22)}
+*{box-sizing:border-box;margin:0;padding:0}
+html{overflow-x:auto}body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--char);font-size:13px;min-height:100vh}
+header{background:var(--esp);color:#fff;padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:50px;position:sticky;top:0;z-index:200}
+.logo{font-family:'Playfair Display',serif;font-size:14px;letter-spacing:.06em;opacity:.9}
+.logo span{opacity:.4;margin:0 7px}
+.hdr-right{font-size:11px;opacity:.45;text-align:right;line-height:1.5}
+.ann-bar{background:var(--esp);border-top:1px solid rgba(255,255,255,.08);padding:.6rem 1.5rem;display:grid;grid-template-columns:repeat(7,1fr);gap:0;position:sticky;top:50px;z-index:199}
+.ac{padding:0 .85rem;border-right:1px solid rgba(255,255,255,.1)}
+.ac:first-child{padding-left:0}.ac:last-child{border-right:none}
+.al{font-size:9px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
+.av{font-size:15px;font-weight:500;color:#fff;font-family:'Playfair Display',serif}
+.av.good{color:#8FCA5A}.av.bad{color:#F09595}
+.asub{font-size:9px;color:rgba(255,255,255,.35);margin-top:1px}
+.nav{background:var(--sand);border-bottom:1px solid var(--bd);padding:0 1.5rem;display:flex;overflow-x:auto;position:sticky;z-index:198}
+.nt{font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:10px 14px;border:none;background:none;color:var(--bark);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;font-family:'DM Sans',sans-serif;font-weight:500}
+.nt:hover{color:var(--esp)}.nt.active{color:var(--esp);border-bottom-color:var(--esp)}
+main{padding:1.25rem 1.5rem 3rem;max-width:1500px}
+.mo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1.25rem}
+.mo-card{background:#fff;border:1px solid var(--bd);border-radius:8px;padding:.8rem 1rem;cursor:pointer;transition:border-color .15s}
+.mo-card:hover{border-color:var(--bdm)}
+.mo-name{font-size:11px;font-weight:500;color:var(--bark);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem}
+.mo-net{font-size:17px;font-weight:500;font-family:'Playfair Display',serif;color:var(--char)}
+.mo-meta{display:flex;gap:8px;margin-top:.3rem;flex-wrap:wrap}
+.mo-tag{font-size:10px;color:var(--bark)}
+.mo-prog{height:3px;background:var(--tan);border-radius:2px;margin-top:.35rem;overflow:hidden}
+.mo-fill{height:100%;border-radius:2px}
+.mo-yoy{font-size:10px;font-weight:500;margin-top:.2rem}
+.notice{font-size:11px;color:var(--bark);background:var(--sand);border:1px solid var(--bd);border-left:3px solid var(--bark);padding:7px 12px;border-radius:4px;margin-bottom:1rem;line-height:1.6}
+.tbl-wrap{border:1px solid var(--bd);border-radius:8px;background:#fff}
+table{width:100%;border-collapse:collapse}
+thead th{font-size:9px;font-weight:500;color:var(--bark);text-transform:uppercase;letter-spacing:.06em;padding:8px 7px;text-align:left;border-bottom:2px solid var(--bdm);white-space:nowrap;background:var(--sand);position:sticky;top:0;z-index:10;box-shadow:0 2px 4px rgba(61,46,34,0.08)}
+thead th.r{text-align:right}
+.grp-hdr th{background:color-mix(in srgb,var(--sand) 70%,var(--tan));font-size:9px;padding:4px 7px;color:var(--bark);position:sticky;top:0px;z-index:10}
+tbody tr{border-bottom:1px solid var(--bd);transition:background .1s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:var(--cream)}
+tbody tr.week-row{background:color-mix(in srgb,var(--sand) 55%,#fff)}
+tbody tr.week-row:hover{background:var(--sand)}
+tbody tr.has-act{background:color-mix(in srgb,var(--flt) 28%,#fff)}
+tbody tr.has-act:hover{background:color-mix(in srgb,var(--flt) 45%,#fff)}
+tbody tr.today-row{background:color-mix(in srgb,var(--sklt) 40%,#fff)}
+tbody tr.special-row{background:color-mix(in srgb,var(--amlt) 35%,#fff)}
+tfoot tr{border-top:2px solid var(--bdm);background:var(--sand)!important}
+td{padding:4px 7px;vertical-align:middle;color:var(--char)}
+td.r{text-align:right}
+td.muted{color:var(--bark)}
+tfoot td{padding:6px 7px;font-size:11px;font-weight:500}
+select.ev{font-size:11px;padding:2px 4px;border:1px solid var(--bdm);border-radius:4px;background:#fff;color:var(--char);font-family:'DM Sans',sans-serif;min-width:138px;width:100%}
+select.ev:focus{outline:2px solid var(--esp);outline-offset:1px}
+input.ai{font-size:11px;padding:2px 5px;border:1px solid var(--bdm);border-radius:4px;background:#fff;color:var(--char);text-align:right;font-family:'DM Sans',sans-serif}
+input.ai:focus{outline:2px solid var(--esp);outline-offset:1px}
+input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--forest);font-weight:500}
+.prog{height:3px;border-radius:2px;background:var(--tan);margin-top:2px;overflow:hidden}
+.pf{height:100%;border-radius:2px}
+.badge{font-size:9px;padding:1px 5px;border-radius:8px;font-weight:500;display:inline-block}
+.badge-today{background:var(--sklt);color:var(--sky)}
+.badge-sp{background:var(--amlt);color:var(--amb)}
+.badge-note{background:var(--sklt);color:var(--sky);cursor:pointer}
+.note-input{font-size:10px;padding:2px 6px;border:1px dashed var(--sky);border-radius:3px;background:var(--sklt);color:var(--sky);width:90px;font-family:'DM Sans',sans-serif}
+.note-input::placeholder{color:var(--sky);opacity:.5}
+.chart-box{background:#fff;border:1px solid var(--bd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1rem}
+.chart-lbl{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--bark);margin-bottom:.55rem}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--bark);margin-bottom:.45rem}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .sq{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.tbl-scroll{border-radius:8px}
+@media(max-width:900px){.mo-grid{grid-template-columns:repeat(2,1fr)}.ann-bar{grid-template-columns:repeat(4,1fr)}.two-col{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div><div class="logo">THREE BIRD NEST <span>&middot;</span> 2026 Promo Planner</div></div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+    <button onclick="getAIRecommendations()" id="ai-rec-btn" style="font-size:11px;padding:5px 12px;border:1px solid rgba(159,225,203,.4);border-radius:4px;background:rgba(159,225,203,.1);color:#9FE1CB;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap" onmouseover="this.style.background='rgba(159,225,203,.2)'" onmouseout="this.style.background='rgba(159,225,203,.1)'">&#10024; AI Recommendations</button>
+    <span style="font-size:10px;color:rgba(255,255,255,.4);letter-spacing:.05em;text-transform:uppercase">Export</span>
+    <button onclick="exportCSV()" style="font-size:11px;padding:5px 11px;border:1px solid rgba(255,255,255,.3);border-radius:4px;background:transparent;color:rgba(255,255,255,.75);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap" onmouseover="this.style.background='rgba(255,255,255,.12)'" onmouseout="this.style.background='transparent'">&#8595; CSV</button>
+    <button onclick="exportXLSX()" style="font-size:11px;padding:5px 11px;border:1px solid rgba(255,255,255,.3);border-radius:4px;background:transparent;color:rgba(255,255,255,.75);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap" onmouseover="this.style.background='rgba(255,255,255,.12)'" onmouseout="this.style.background='transparent'">&#8595; XLSX</button>
+    <button onclick="exportData()" style="font-size:11px;padding:5px 11px;border:1px solid rgba(255,255,255,.2);border-radius:4px;background:transparent;color:rgba(255,255,255,.45);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background='transparent'" title="Export full state as JSON (for sending back for recalibration)">&#8595; JSON</button>
+  </div>
+    <div class="hdr-right">Annual Goal $45,995,925 &middot; Jan&ndash;Dec 2026<br>Rolling 28-day baselines &middot; Weeks Mon&ndash;Sun &middot; v4 &nbsp;<span id="sync-status" style="font-size:10px;opacity:.7">○ connecting...</span></div>
+  </div>
+</header>
+<div class="ann-bar">
+  <div class="ac"><div class="al">YTD Actual Net</div><div class="av" id="a-ytd">--</div><div class="asub" id="a-ytd-sub">loading</div></div>
+  <div class="ac"><div class="al">vs Annual Goal</div><div class="av" id="a-vs">--</div></div>
+  <div class="ac"><div class="al">Full Year Proj</div><div class="av" id="a-fy">--</div></div>
+  <div class="ac"><div class="al">YOY vs 2025</div><div class="av" id="a-yoy">--</div></div>
+  <div class="ac"><div class="al">Avg ROAS (YTD)</div><div class="av" id="a-roas">--</div></div>
+  <div class="ac"><div class="al">Avg Margin (YTD)</div><div class="av" id="a-margin">--</div></div>
+  <div class="ac"><div class="al">Months on Track</div><div class="av" id="a-track">--</div></div>
+</div>
+<div class="nav">
+  <button class="nt nt-main active" onclick="showTab('overview')">Year Overview</button>
+  <button class="nt nt-main" onclick="showTab('planner')">Daily Planner</button>
+  <button class="nt nt-main" onclick="showTab('actuals')">Enter Actuals</button>
+  <button class="nt nt-main" onclick="showTab('charts')">Charts</button>
+  <button class="nt nt-main" onclick="showTab('yoy')">YOY Comparison</button>
+  <button class="nt nt-main" onclick="showTab('benchmarks')">Event Benchmarks</button>
+</div>
+<main>
+
+<!-- AI Recommendations Modal -->
+<div id="ai-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:500;overflow-y:auto">
+  <div style="max-width:760px;margin:60px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="background:var(--esp);padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-family:'Playfair Display',serif;font-size:15px;color:#fff">&#10024; AI Event Recommendations</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px">Powered by Claude · Based on your actuals, baselines & monthly goals</div>
+      </div>
+      <button onclick="document.getElementById('ai-modal').style.display='none'" style="background:none;border:none;color:rgba(255,255,255,.6);font-size:18px;cursor:pointer">&#10005;</button>
+    </div>
+    <div id="ai-modal-body" style="padding:1.5rem">
+      <div style="text-align:center;padding:2rem;color:var(--bark)">
+        <div style="font-size:24px;margin-bottom:.5rem">&#10024;</div>
+        <div>Analyzing your data...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-overview">
+  <div class="notice">Click any month card to jump to its daily rows. Projections use a <strong>rolling 28-day BAU baseline</strong> — recalculates automatically as you enter actuals. Promo days excluded from baseline. <span id="baseline-status" style="color:var(--forest)"></span></div>
+  <div class="mo-grid" id="mo-grid"></div>
+  <div class="chart-box">
+    <div class="chart-lbl">Monthly Net Revenue &mdash; 2026 Actual/Proj vs Goal vs 2025</div>
+    <div class="legend">
+      <span><span class="sq" style="background:#3D2E22"></span>2026 Actual/Proj</span>
+      <span><span class="sq" style="background:#C4B8A8"></span>2026 Goal</span>
+      <span><span class="sq" style="background:#9FE1CB"></span>2025 Actual</span>
+    </div>
+    <div style="position:relative;height:280px"><canvas id="ov-chart"></canvas></div>
+  </div>
+</div>
+
+<div id="tab-planner" style="display:none">
+  <div style="display:flex;gap:8px;margin-bottom:.85rem;flex-wrap:wrap;align-items:center">
+    <span style="font-size:12px;color:var(--bark)">Jump to month:</span>
+    <div id="month-nav" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+  </div>
+  <div class="notice">Locked rows (Jan 1&ndash;Mar 25) show real actuals in green. Future rows show <em>proj</em> amount + event basis — change the event type dropdown to re-model instantly. Weekly totals in shaded rows show goal / projected / actual split.</div>
+  <div class="tbl-wrap"><div class="tbl-scroll">
+  <table>
+  <thead><tr>
+    <th style="width:22px">#</th>
+    <th style="width:72px">Date</th>
+    <th style="width:30px">DOW</th>
+    <th style="width:150px">Event Type</th>
+    <th class="r" style="width:88px">Team Goal</th>
+    <th class="r" style="width:88px">Model Suggestion</th>
+    <th style="width:140px">Event Rec</th>
+    <th class="r" style="width:88px">Projected</th>
+    <th class="r" style="width:88px">Actual</th>
+    <th class="r" style="width:68px">vs Goal</th>
+    <th class="r" style="width:48px">ROAS</th>
+    <th class="r" style="width:46px">CVR</th>
+    <th class="r" style="width:60px">Proj Margin</th><th class="r" style="width:64px">Act Margin</th>
+    <th class="r" style="width:68px">Sessions</th>
+    <th class="r" style="width:70px">Est Returns</th>
+    <th class="r" style="width:68px">2025 Net</th>
+    <th class="r" style="width:56px">YOY</th>
+  </tr></thead>
+  <tbody id="plan-body"></tbody>
+  </table>
+  </div></div>
+</div>
+
+<div id="tab-actuals" style="display:none">
+  <!-- Import toolbar -->
+  <div style="background:var(--sand);border:1px solid var(--bd);border-radius:8px;padding:.75rem 1rem;margin-bottom:.85rem">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:.5rem">
+      <span style="font-size:10px;font-weight:500;color:var(--bark);text-transform:uppercase;letter-spacing:.06em">Import Actuals</span>
+      <button onclick="downloadTemplate()" style="font-size:11px;padding:4px 11px;border:1px solid var(--bdm);border-radius:4px;background:#fff;color:var(--char);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap" onmouseover="this.style.borderColor='var(--esp)'" onmouseout="this.style.borderColor='var(--bdm)'">&#8595; Download Template</button>
+      <label style="cursor:pointer">
+        <input type="file" accept=".csv,.xlsx,.xls" id="import-file" style="display:none" onchange="handleFileImport(this)"/>
+        <span style="font-size:11px;padding:4px 11px;border:1px solid var(--bdm);border-radius:4px;background:#fff;color:var(--char);cursor:pointer;white-space:nowrap;display:inline-block" onmouseover="this.style.borderColor='var(--esp)'" onmouseout="this.style.borderColor='var(--bdm)'">&#8593; Upload CSV / XLSX</span>
+      </label>
+      <button onclick="togglePasteZone()" style="font-size:11px;padding:4px 11px;border:1px solid var(--bdm);border-radius:4px;background:#fff;color:var(--char);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap" onmouseover="this.style.borderColor='var(--esp)'" onmouseout="this.style.borderColor='var(--bdm)'">&#9112; Paste from Excel</button>
+      <span id="import-status" style="font-size:11px;margin-left:auto"></span>
+    </div>
+    <!-- Paste zone -->
+    <div id="paste-zone" style="display:none;margin-top:.5rem">
+      <div style="font-size:11px;color:var(--bark);margin-bottom:6px">Copy rows from your filled template (or any sheet with a Date column), then paste below. CVR, ROAS and all totals update instantly.</div>
+      <textarea id="paste-area" rows="5" placeholder="Paste here (Ctrl+V / Cmd+V)..." style="width:100%;font-size:11px;padding:8px;border:1px dashed var(--sky);border-radius:6px;background:var(--sklt);font-family:'DM Sans',sans-serif;resize:vertical;color:var(--char)"></textarea>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button onclick="processPaste()" style="font-size:11px;padding:4px 14px;border:1px solid var(--esp);border-radius:4px;background:var(--esp);color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif">Import</button>
+        <button onclick="togglePasteZone()" style="font-size:11px;padding:4px 12px;border:1px solid var(--bd);border-radius:4px;background:transparent;color:var(--bark);cursor:pointer;font-family:'DM Sans',sans-serif">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <!-- Filter bar -->
+  <div style="display:flex;gap:6px;margin-bottom:.75rem;flex-wrap:wrap;align-items:center">
+    <span style="font-size:12px;color:var(--bark)">Filter:</span>
+    <div id="act-filter" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+  </div>
+  <div class="notice">Green rows = pre-loaded from CSV. Use the template above to fill actuals from your Shopify + TW exports, then upload or paste. All fields also individually editable. Saves automatically.</div>
+  <div class="tbl-wrap"><div class="tbl-scroll">
+  <table>
+  <thead>
+    <tr class="grp-hdr">
+      <th colspan="2"></th>
+      <th colspan="2" style="border-left:1px solid var(--bd)">Revenue</th>
+      <th colspan="3" style="border-left:1px solid var(--bd)">Traffic &amp; Conversion</th>
+      <th colspan="2" style="border-left:1px solid var(--bd)">Marketing</th>
+      <th style="border-left:1px solid var(--bd)">Margin</th>
+      <th colspan="2" style="border-left:1px solid var(--bd)">Customers</th>
+    </tr>
+    <tr>
+      <th style="width:78px">Date</th>
+      <th style="width:140px">Event Type</th>
+      <th class="r" style="width:86px;border-left:1px solid var(--bd)">Net Rev $</th>
+      <th class="r" style="width:76px">Returns $</th>
+      <th class="r" style="width:74px;border-left:1px solid var(--bd)">Sessions</th>
+      <th class="r" style="width:64px">Orders</th>
+      <th class="r" style="width:52px">CVR</th>
+      <th class="r" style="width:80px;border-left:1px solid var(--bd)">Ad Spend $</th>
+      <th class="r" style="width:52px">ROAS</th>
+      <th class="r" style="width:64px;border-left:1px solid var(--bd)">Act Margin %</th>
+      <th class="r" style="width:66px;border-left:1px solid var(--bd)">New Cust</th>
+      <th class="r" style="width:66px">Ret Cust</th>
+    </tr>
+  </thead>
+  <tbody id="act-body"></tbody>
+  <tfoot><tr>
+    <td colspan="2">Totals (actual days only)</td>
+    <td class="r" style="border-left:1px solid var(--bd)" id="at-net">--</td>
+    <td class="r" id="at-ret">--</td>
+    <td class="r" style="border-left:1px solid var(--bd)" id="at-sess">--</td>
+    <td class="r" id="at-ord">--</td>
+    <td class="r" id="at-cvr">--</td>
+    <td class="r" style="border-left:1px solid var(--bd)" id="at-spend">--</td>
+    <td class="r" id="at-roas">--</td>
+    <td class="r" style="border-left:1px solid var(--bd)" id="at-margin">--</td>
+    <td class="r" style="border-left:1px solid var(--bd)" id="at-new">--</td>
+    <td class="r" id="at-retc">--</td>
+  </tr></tfoot>
+  </table>
+  </div></div>
+</div>
+
+<div id="tab-charts" style="display:none">
+  <div class="chart-box">
+    <div class="chart-lbl">Weekly Net Revenue &mdash; Actual vs Projected vs Goal (W1 = 12/29&ndash;1/4)</div>
+    <div class="legend">
+      <span><span class="sq" style="background:#3D2E22"></span>Actual weeks</span>
+      <span><span class="sq" style="background:#3B6D11"></span>Projected weeks</span>
+      <span><span class="sq" style="background:#C4B8A8"></span>Weekly goal</span>
+    </div>
+    <div style="position:relative;height:300px"><canvas id="wk-chart"></canvas></div>
+  </div>
+  <div class="two-col">
+    <div class="chart-box"><div class="chart-lbl">ROAS by Week</div><div style="position:relative;height:200px"><canvas id="roas-chart"></canvas></div></div>
+    <div class="chart-box"><div class="chart-lbl">Margin % by Week</div><div style="position:relative;height:200px"><canvas id="margin-chart"></canvas></div></div>
+  </div>
+</div>
+
+<div id="tab-yoy" style="display:none">
+  <div class="notice">Full 2025 actuals from your CSV. 2026 = real actuals where available + event-type projections for remaining days.</div>
+  <div class="tbl-wrap" style="margin-bottom:1rem"><div class="tbl-scroll">
+  <table>
+  <thead><tr>
+    <th>Month</th><th class="r">2026 Goal</th><th class="r">2026 Act/Proj</th><th class="r">2025 Actual</th>
+    <th class="r">YOY $</th><th class="r">YOY %</th><th class="r">vs 2026 Goal $</th><th class="r">Goal %</th>
+  </tr></thead>
+  <tbody id="yoy-body"></tbody>
+  <tfoot><tr>
+    <td>Full Year</td>
+    <td class="r" id="yoy-ft-goal">--</td><td class="r" id="yoy-ft-26">--</td><td class="r" id="yoy-ft-25">--</td>
+    <td class="r" id="yoy-ft-delta">--</td><td class="r" id="yoy-ft-pct">--</td>
+    <td class="r" id="yoy-ft-vsg">--</td><td class="r" id="yoy-ft-gpct">--</td>
+  </tr></tfoot>
+  </table>
+  </div></div>
+  <div class="chart-box">
+    <div class="chart-lbl">2026 vs 2025 Monthly Net Revenue</div>
+    <div style="position:relative;height:260px"><canvas id="yoy-chart"></canvas></div>
+  </div>
+</div>
+
+<div id="tab-benchmarks" style="display:none;min-height:400px">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:.85rem">
+    <div class="notice" style="margin-bottom:0;flex:1">Lift multipliers from historical benchmarks. <span id="lift-status" style="color:var(--forest)"></span></div>
+    <button onclick="showRecalibrate()" style="font-size:11px;padding:5px 14px;border:1px solid var(--bdm);border-radius:4px;background:#fff;color:var(--char);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap" onmouseover="this.style.borderColor='var(--esp)'" onmouseout="this.style.borderColor='var(--bdm)'">&#9881; Recalibrate Lifts from Actuals</button>
+  </div>
+  <div id="recalib-panel" style="display:none;margin-bottom:1rem;border:1px solid var(--bd);border-radius:8px;background:#fff;padding:1rem">
+    <div style="font-size:12px;font-weight:500;color:var(--char);margin-bottom:.5rem">Computed lifts from your actuals vs current benchmarks</div>
+    <div style="font-size:11px;color:var(--bark);margin-bottom:.75rem">Lift = your actual revenue &divide; the BAU baseline for that DOW. Only event types with 2+ actual days shown. Review before applying.</div>
+    <div id="recalib-table"></div>
+    <div style="display:flex;gap:8px;margin-top:.75rem">
+      <button onclick="applySelectedLifts()" style="font-size:11px;padding:4px 14px;border:1px solid var(--esp);border-radius:4px;background:var(--esp);color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif">Apply Selected</button>
+      <button onclick="applyAllLifts()" style="font-size:11px;padding:4px 14px;border:1px solid var(--bdm);border-radius:4px;background:#fff;color:var(--char);cursor:pointer;font-family:'DM Sans',sans-serif">Apply All</button>
+      <button onclick="resetLifts()" style="font-size:11px;padding:4px 14px;border:1px solid var(--bd);border-radius:4px;background:transparent;color:var(--bark);cursor:pointer;font-family:'DM Sans',sans-serif">Reset to Defaults</button>
+      <button onclick="document.getElementById('recalib-panel').style.display='none'" style="font-size:11px;padding:4px 12px;border:1px solid var(--bd);border-radius:4px;background:transparent;color:var(--bark);cursor:pointer;font-family:'DM Sans',sans-serif;margin-left:auto">Close</button>
+    </div>
+  </div>
+  <div class="tbl-wrap"><div class="tbl-scroll">
+  <table>
+  <thead><tr><th>Event Type</th><th class="r">Lift vs None</th><th class="r">Margin %</th><th class="r">ROAS</th><th class="r">CVR</th><th class="r">Mon Proj</th><th class="r">Fri Proj</th><th class="r">Sat Proj</th><th class="r">Sun Proj</th><th class="r">Return Risk</th><th>Band</th></tr></thead>
+  <tbody id="bench-body"></tbody>
+  </table>
+  </div></div>
+</div>
+
+</main>
+<script>
+const ACTUALS_2026={}; // actuals now stored in localStorage
+const ACTUALS_2025={}; // daily 2025 YOY column removed — monthly YOY still available
+const MONTHLY_2025={"1":{"net":2312493,"sessions":1381994,"spend":311861},"2":{"net":2981812,"sessions":1564386,"spend":395938},"3":{"net":3102962,"sessions":1771971,"spend":407360},"4":{"net":2735078,"sessions":1646087,"spend":431751},"5":{"net":3071313,"sessions":1793041,"spend":498731},"6":{"net":2464493,"sessions":1608590,"spend":429503},"7":{"net":2513452,"sessions":1676055,"spend":416676},"8":{"net":3957883,"sessions":2312279,"spend":562915},"9":{"net":2964976,"sessions":1876234,"spend":485853},"10":{"net":2664223,"sessions":1725914,"spend":459677},"11":{"net":3765624,"sessions":2065542,"spend":707482},"12":{"net":2956696,"sessions":1795187,"spend":528330}};
+const DOW_WEIGHTS={"1":{"Wed":0.7883,"Thu":0.3887,"Fri":1.8726,"Sat":1.3783,"Sun":1.396,"Mon":0.7244,"Tue":0.4517},"2":{"Sat":1.4634,"Sun":1.6037,"Mon":0.8854,"Tue":0.2829,"Wed":0.3141,"Thu":0.5842,"Fri":1.8662},"3":{"Sat":1.591,"Sun":1.7643,"Mon":0.5117,"Tue":0.3587,"Wed":0.357,"Thu":0.3559,"Fri":2.0614},"4":{"Tue":0.4389,"Wed":0.5176,"Thu":0.4817,"Fri":2.0017,"Sat":1.3458,"Sun":1.5557,"Mon":0.6587},"5":{"Thu":0.7004,"Fri":1.5503,"Sat":1.1883,"Sun":1.4422,"Mon":1.1217,"Tue":0.4332,"Wed":0.5639},"6":{"Sun":1.5849,"Mon":0.5982,"Tue":0.4196,"Wed":0.4203,"Thu":0.4651,"Fri":1.9907,"Sat":1.5213},"7":{"Tue":0.4183,"Wed":0.4765,"Thu":0.5566,"Fri":1.8162,"Sat":1.3969,"Sun":1.5845,"Mon":0.751},"8":{"Fri":1.5788,"Sat":1.5344,"Sun":1.6662,"Mon":0.487,"Tue":0.4656,"Wed":0.669,"Thu":0.5989},"9":{"Mon":1.266,"Tue":0.406,"Wed":0.4028,"Thu":0.3976,"Fri":1.5712,"Sat":1.2717,"Sun":1.6848},"10":{"Wed":0.5936,"Thu":0.6105,"Fri":1.2523,"Sat":1.4109,"Sun":1.7073,"Mon":0.7929,"Tue":0.6325},"11":{"Sat":1.1846,"Sun":1.2803,"Mon":0.7161,"Tue":0.4225,"Wed":0.7677,"Thu":1.0641,"Fri":1.5647},"12":{"Mon":1.0597,"Tue":0.7255,"Wed":0.7303,"Thu":0.6372,"Fri":1.4253,"Sat":1.1543,"Sun":1.2677}};
+const APRIL_GOALS={"2026-04-01":75000,"2026-04-02":75000,"2026-04-03":150000,"2026-04-04":150000,"2026-04-05":160000,"2026-04-06":80000,"2026-04-07":75000,"2026-04-08":85000,"2026-04-09":85000,"2026-04-10":509905,"2026-04-11":287651,"2026-04-12":312881,"2026-04-13":90000,"2026-04-14":85000,"2026-04-15":85000,"2026-04-16":85000,"2026-04-17":150000,"2026-04-18":150000,"2026-04-19":150000,"2026-04-20":160000,"2026-04-21":90000,"2026-04-22":85000,"2026-04-23":85000,"2026-04-24":85000,"2026-04-25":150000,"2026-04-26":150000,"2026-04-27":160000,"2026-04-28":90000,"2026-04-29":85000,"2026-04-30":85000};
+
+const ANNUAL_GOAL=45995925;
+const DEFAULT_MONTH_GOALS={1:2589105,2:3756694,3:3909691,4:4000437,5:4369999,6:3450000,7:3680000,8:3219999,9:5520000,10:3220001,11:4830000,12:3449999};
+let MONTH_GOALS=Object.assign({},DEFAULT_MONTH_GOALS); // mutable — user can edit
+const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+let DOW_BASE={"Mon":{"net":79782,"sess":77645},"Tue":{"net":72865,"sess":68821},"Wed":{"net":73034,"sess":63809},"Thu":{"net":85548,"sess":67934},"Fri":{"net":140944,"sess":98100},"Sat":{"net":141972,"sess":102354},"Sun":{"net":164314,"sess":93212}}; // BAU-only (promo days excluded)
+let DOW_CVR={"Mon":0.0101,"Tue":0.01,"Wed":0.0103,"Thu":0.0112,"Fri":0.013,"Sat":0.0123,"Sun":0.0135}; // BAU-only actuals
+let LIFT={"None":{lift:1.00,margin:.664,mer:4.64,cvr:.0094,retRate:.06,marginDelta:0},"OOTW":{lift:1.19,margin:.572,mer:5.15,cvr:.0130,retRate:.08,marginDelta:-.092},"New Capsule":{lift:1.00,margin:.620,mer:5.00,cvr:.0120,retRate:.07,marginDelta:-.044},"PPT":{lift:2.20,margin:.569,mer:7.09,cvr:.0201,retRate:.08,marginDelta:-.095},"Boho Bliss":{lift:3.01,margin:.536,mer:8.67,cvr:.0285,retRate:.10,marginDelta:-.128},"Early Access-Sitewide 40":{lift:2.48,margin:.576,mer:10.58,cvr:.0278,retRate:.11,marginDelta:-.088},"Sitewide 40":{lift:4.79,margin:.549,mer:8.49,cvr:.0355,retRate:.14,marginDelta:-.115},"BFCM":{lift:4.44,margin:.536,mer:5.65,cvr:.0401,retRate:.13,marginDelta:-.128},"Free Shipping":{lift:1.77,margin:.606,mer:5.52,cvr:.0211,retRate:.07,marginDelta:-.058},"Sitewide-Tiered":{lift:2.69,margin:.580,mer:8.43,cvr:.0221,retRate:.11,marginDelta:-.084},"Sale on Sale":{lift:1.48,margin:.606,mer:6.34,cvr:.0193,retRate:.10,marginDelta:-.058},"Early Access-Sitewide 33":{lift:1.45,margin:.648,mer:7.74,cvr:.0205,retRate:.09,marginDelta:-.016},"Sitewide 33":{lift:2.80,margin:.604,mer:7.73,cvr:.0274,retRate:.12,marginDelta:-.060},"OOTW + New Capsule":{lift:1.10,margin:.618,mer:5.55,cvr:.0135,retRate:.08,marginDelta:-.046}};
+const DEFAULT_LIFT=JSON.parse(JSON.stringify(LIFT)); // snapshot for reset
+
+// DOW baseline margins from 2026 YTD actuals (more accurate than historical benchmarks)
+let DOW_MARGIN={"Mon":0.61,"Tue":0.621,"Wed":0.62,"Thu":0.618,"Fri":0.599,"Sat":0.592,"Sun":0.588}; // BAU-only actuals
+const DOW_OVR={Mon:{"Sitewide 40":3.25,"BFCM":2.61,"OOTW + New Capsule":0.91},Tue:{"None":0.94,"OOTW + New Capsule":0.58,"PPT":0.71,"Sitewide 40":1.96},Wed:{},Thu:{},Fri:{"None":0.98,"Free Shipping":0.73,"PPT":1.04,"Boho Bliss":1.97,"Sitewide 40":2.21,"BFCM":3.00,"Sitewide-Tiered":1.45},Sat:{"None":0.98,"Free Shipping":0.66,"PPT":0.93,"Boho Bliss":1.49,"Sitewide 40":2.04,"BFCM":1.75,"Sitewide-Tiered":1.04},Sun:{"None":1.00,"Sitewide 40":4.79}};
+const BAND={"None":"High","OOTW":"Medium","New Capsule":"Medium","PPT":"Low","Boho Bliss":"Low","Early Access-Sitewide 40":"Medium","Sitewide 40":"Low","BFCM":"Low","Free Shipping":"Medium","Sitewide-Tiered":"Medium","Sale on Sale":"Medium","Early Access-Sitewide 33":"High","Sitewide 33":"Medium","OOTW + New Capsule":"Medium"};
+
+// Special days — Easter = Apr 3-5 (Fri/Sat/Sun)
+const SPECIAL={
+  "2026-04-05":"Easter",
+  "2026-05-25":"Memorial Day",
+  "2026-07-04":"4th of July",
+  "2026-09-07":"Labor Day",
+  "2026-11-26":"Thanksgiving",
+  "2026-12-25":"Christmas",
+  "2026-12-26":"Boxing Day",
+  "2026-02-14":"Valentine's Day"
+};
+
+// April defaults: Easter Apr 3-5 = Free Shipping/Sitewide, Apr 10-12 = EA+SW40
+const APR_DEF={
+  "2026-04-01":"None","2026-04-02":"None",
+  "2026-04-03":"Early Access-Sitewide 40","2026-04-04":"Sitewide 40","2026-04-05":"Sitewide 40",
+  "2026-04-06":"OOTW + New Capsule","2026-04-07":"None",
+  "2026-04-08":"None","2026-04-09":"None",
+  "2026-04-10":"Early Access-Sitewide 40","2026-04-11":"Sitewide 40","2026-04-12":"Sitewide 40",
+  "2026-04-13":"None","2026-04-14":"OOTW + New Capsule",
+  "2026-04-15":"None","2026-04-16":"None",
+  "2026-04-17":"OOTW","2026-04-18":"OOTW","2026-04-19":"OOTW","2026-04-20":"OOTW",
+  "2026-04-21":"OOTW + New Capsule","2026-04-22":"None","2026-04-23":"None","2026-04-24":"None",
+  "2026-04-25":"PPT","2026-04-26":"PPT","2026-04-27":"PPT",
+  "2026-04-28":"OOTW + New Capsule","2026-04-29":"None","2026-04-30":"None"
+};
+
+const TODAY=new Date(); TODAY.setHours(0,0,0,0);
+// Build ISO from local date to avoid UTC offset issues
+const TODAY_ISO=(()=>{const t=TODAY;return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;})();
+
+// ── TBN Week numbering: Mon-Sun, W1 starts 12/29/2025 ───
+const WEEK1_MS=Date.UTC(2025,11,29); // Dec 29 2025 in UTC ms — DST-safe baseline
+function getTBNWeek(dt){
+  // Use Date.UTC for both ends so DST never affects the ms difference
+  const p=dt.split('-');
+  const dMs=Date.UTC(+p[0],+p[1]-1,+p[2]);
+  const diff=Math.round((dMs-WEEK1_MS)/86400000);
+  return diff>=0?Math.floor(diff/7)+1:null;
+}
+function getWeekMonday(dt){
+  // Parse to UTC components, find Monday, return as local Date for display only
+  const p=(typeof dt==='string'?dt:dt.toISOString().slice(0,10)).split('-');
+  const y=+p[0],m=+p[1]-1,d=+p[2];
+  // Use UTC to find day-of-week without DST interference
+  const dow=new Date(Date.UTC(y,m,d)).getUTCDay(); // 0=Sun
+  const daysToMon=dow===0?-6:1-dow;
+  return new Date(Date.UTC(y,m,d+daysToMon)); // UTC Date — only used for .getMonth()/.getDate() display
+}
+
+// Build all 365 2026 days
+const DAYS=[];
+let _y=2026,_m=0,_day=1;
+while(_y===2026){
+  const _d=new Date(_y,_m,_day);
+  // Build ISO string from local date parts (avoids UTC shift)
+  const iso=`${_y}-${String(_m+1).padStart(2,'0')}-${String(_day).padStart(2,'0')}`;
+  const jsDay=_d.getDay();
+  const dow=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][jsDay];
+  const dows=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][jsDay];
+  DAYS.push({iso,mon:_m+1,dow,dows,day:_day,
+    special:SPECIAL[iso]||null,isToday:iso===TODAY_ISO,
+    isPast:_d<TODAY,wkNum:getTBNWeek(iso)});
+  // Advance by 1 day using local date math (DST-safe)
+  _day++;
+  const next=new Date(_y,_m,_day);
+  _y=next.getFullYear();_m=next.getMonth();_day=next.getDate();
+}
+
+// Daily goals: April uses exact xlsx values, other months use DOW weights
+function buildDailyGoals(){
+  const g={};
+  for(let m=1;m<=12;m++){
+    const md=DAYS.filter(x=>x.mon===m);
+    if(m===4){
+      // Use exact April goals from xlsx
+      md.forEach(x=>{g[x.iso]=APRIL_GOALS[x.iso]||85000;});
+    } else {
+      const wts=DOW_WEIGHTS[String(m)]||{};
+      const tot=md.reduce((s,x)=>s+(wts[x.dow]||1),0);
+      md.forEach(x=>{g[x.iso]=Math.round(MONTH_GOALS[m]*(wts[x.dow]||1)/tot);});
+    }
+  }
+  return g;
+}
+const BASE_GOALS=buildDailyGoals();
+function getGoal(iso){return userGoals[iso]!=null?userGoals[iso]:BASE_GOALS[iso]||0;}
+function setMonthGoal(mon,val){
+  const n=parseFloat(String(val).replace(/[$,]/g,''));
+  if(isNaN(n)||n<=0){
+    delete userMonthGoals[mon];
+    MONTH_GOALS[mon]=DEFAULT_MONTH_GOALS[mon];
+  } else {
+    userMonthGoals[mon]=n;
+    MONTH_GOALS[mon]=n;
+  }
+  lsSet('umg',userMonthGoals);
+  // Rebuild daily goals for this month
+  const md=DAYS.filter(function(d){return d.mon===mon;});
+  md.forEach(function(day){
+    if(userGoals[day.iso]==null) delete BASE_GOALS[day.iso];
+  });
+  // Recalculate BASE_GOALS for this month
+  if(mon===4){
+    md.forEach(function(day){BASE_GOALS[day.iso]=APRIL_GOALS[day.iso]||85000;});
+  } else {
+    const wts=DOW_WEIGHTS[String(mon)]||{};
+    const tot=md.reduce(function(s,d){return s+(wts[d.dow]||1);},0);
+    md.forEach(function(day){BASE_GOALS[day.iso]=Math.round(MONTH_GOALS[mon]*(wts[day.dow]||1)/tot);});
+  }
+  buildPlanner();buildOverview();updateAnnual();if(_chartsBuilt)_updateCharts();
+}
+function setGoal(iso,val){
+  const n=parseFloat(val);
+  if(val===''||isNaN(n)) delete userGoals[iso];
+  else userGoals[iso]=n;
+  lsSet('ug',userGoals);
+}
+
+// State
+function lsGet(k){try{return JSON.parse(localStorage.getItem('tbn26_'+k))||null}catch(e){return null}}
+function lsSet(k,v){
+  try{localStorage.setItem('tbn26_'+k,JSON.stringify(v))}catch(e){}
+  // Also write to Firestore if available
+  if(window.fbSetFn) window.fbSetFn(k,v);
+}
+let evSel=lsGet('ev')||{};
+let userAct=lsGet('ua')||{};
+let userGoals=lsGet('ug')||{};  // user-overridden daily goals
+let lockedProj=lsGet('lp')||{}; // locked projections — only reset when event type or goal changes
+let userNotes=lsGet('un')||{};  // custom callout labels per day
+let userMonthGoals=lsGet('umg')||{}; // user-overridden monthly goals
+// Apply saved monthly goals on load
+(function(){Object.keys(userMonthGoals).forEach(function(m){MONTH_GOALS[parseInt(m)]=userMonthGoals[m];});})();
+
+// Event types considered promo — excluded from BAU baseline
+const PROMO_EVENTS=new Set(['Sitewide 40','Early Access-Sitewide 40','Sitewide 33',
+  'Early Access-Sitewide 33','BFCM','Boho Bliss','Sitewide-Tiered','Sale on Sale','PPT']);
+
+const HOLIDAY_EV={
+  // Memorial Day: EA 5/21 (Thu), SW40 5/22-5/25 (Fri-Mon)
+  "2026-05-21":"Early Access-Sitewide 40",
+  "2026-05-22":"Sitewide 40","2026-05-23":"Sitewide 40","2026-05-24":"Sitewide 40","2026-05-25":"Sitewide 40",
+  // 4th of July: EA 7/2 (Thu), SW40 7/3-7/5 (Fri-Sun)
+  "2026-07-02":"Early Access-Sitewide 40",
+  "2026-07-03":"Sitewide 40","2026-07-04":"Sitewide 40","2026-07-05":"Sitewide 40",
+  // Labor Day: EA 9/3 (Thu), SW40 9/4-9/7 (Fri-Mon)
+  "2026-09-03":"Early Access-Sitewide 40",
+  "2026-09-04":"Sitewide 40","2026-09-05":"Sitewide 40","2026-09-06":"Sitewide 40","2026-09-07":"Sitewide 40"
+};
+function getEv(iso){
+  if(evSel[iso]) return evSel[iso];
+  if(APR_DEF[iso]) return APR_DEF[iso];
+  if(HOLIDAY_EV[iso]) return HOLIDAY_EV[iso];
+  const day=DAYS.find(x=>x.iso===iso);
+  if(!day) return 'None';
+  if(day.dow==='Mon') return 'OOTW + New Capsule';
+  return 'None';
+}
+function setEv(iso,val){evSel[iso]=val;lsSet('ev',evSel);}
+function getUA(iso){return userAct[iso]||{};}
+function setUA(iso,key,val){
+  if(!userAct[iso])userAct[iso]={};
+  const n=parseFloat(val);
+  if(val===''||isNaN(n)) delete userAct[iso][key];
+  // Returns can come in as negative from Shopify — store as positive
+  else userAct[iso][key]=(key==='returns')?Math.abs(n):n;
+  lsSet('ua',userAct);
+}
+
+function getLift(dow,ev){const o=DOW_OVR[dow];return(o&&o[ev]!==undefined)?o[ev]:(LIFT[ev]?LIFT[ev].lift:1);}
+
+function getDayData(iso){
+  const day=DAYS.find(x=>x.iso===iso);
+  if(!day) return null;
+  const ua=getUA(iso);
+  const evName=getEv(iso);
+  const ev=LIFT[evName]||LIFT['None'];
+  const base=DOW_BASE[day.dow];
+  const lift=getLift(day.dow,evName);
+  const _rawProjNet=Math.round(base.net*lift);
+  const sessLift=lift>1?1+(lift-1)*0.5:Math.max(lift,0.85);
+  const _rawProjSess=Math.round(base.sess*sessLift);
+  const projNet=lockedProj[iso]?lockedProj[iso].net:_rawProjNet;
+  const projSess=lockedProj[iso]?lockedProj[iso].sess:_rawProjSess;
+  // All actuals live in userAct (localStorage) — single source of truth
+  const isAct=ua.net!=null;
+  const hasCSV=false;
+  const hasUA=isAct;
+  const net=isAct?ua.net:null;
+  const sessions=ua.sessions||null;
+  const spend=ua.spend||null;
+  const orders=ua.orders||null;
+  const returns=ua.returns||null;
+  const newCust=ua.newCust||null;
+  const retCust=ua.retCust||null;
+  const baseDOWMargin=DOW_MARGIN[day.dow]||0.605;
+  const projMargin=Math.max(0.40,Math.min(0.75,baseDOWMargin+(ev.marginDelta||0)));
+  const actualMargin=ua.actualMargin!=null?ua.actualMargin:null;
+  const margin=actualMargin!=null?actualMargin:projMargin;
+  const baseCVR=DOW_CVR[day.dow]||ev.cvr;
+  const cvr=orders&&sessions?orders/sessions:baseCVR;
+  const roas=spend&&net?net/spend:ev.mer;
+  const displayNet=isAct?net:projNet;
+  const goal=getGoal(iso)||0;
+  const diff=displayNet-goal;
+  const fp=Math.min(100,Math.round(displayNet/goal*100));
+  const estReturns=returns||(displayNet*ev.retRate);
+  const retRisk=ev.retRate<0.08?'low':ev.retRate<0.11?'med':'high';
+  const yiso=iso.replace('2026','2025');
+  const y25=ACTUALS_2025[yiso]||null;
+    // Model suggestion: what the tool recommends based on event plan
+  // = projNet (already computed above)
+  // As a % of monthly model total, redistributed to monthly team goal
+  const modelSug=_rawProjNet; // raw projection before any lock
+  return{...day,goal,evName,ev,isAct,hasCSV,hasUA,modelSug,
+    net:displayNet,actualNet:net,projNet,projMargin,actualMargin,
+    sessions:sessions||projSess,
+    spend,orders,returns,newCust,retCust,margin,cvr,roas,
+    diff,fp,estReturns,retRisk,yoy25:y25?.net||null};
+}
+
+// Formatters
+const f$=n=>'$'+Math.round(n).toLocaleString();
+const fK=n=>n>=1e6?'$'+(n/1e6).toFixed(2)+'M':n>=1e3?'$'+Math.round(n/1e3)+'K':'$'+Math.round(n);
+const pct=n=>(n*100).toFixed(1)+'%';
+const fN=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'K':Math.round(n)+'';
+const clr=v=>v>0?'#3B6D11':v<0?'#A32D2D':'inherit';
+
+// Annual summary
+function updateAnnual(){
+  let ytd=0,fyP=0,roasN=0,roasD=0,margS=0,margC=0,actD=0;
+  for(const day of DAYS){
+    const dd=getDayData(day.iso);if(!dd)continue;
+    fyP+=dd.net;
+    if(dd.isAct){ytd+=dd.net;actD++;}
+    if(dd.spend&&dd.net){roasN+=dd.net;roasD+=dd.net/dd.roas;}
+    if(dd.margin){margS+=dd.margin;margC++;}
+  }
+  const tot25=Object.values(MONTHLY_2025).reduce((s,m)=>s+m.net,0);
+  const yoyP=tot25>0?(fyP-tot25)/tot25*100:0;
+  const diff=fyP-ANNUAL_GOAL;
+  const onTrack=Object.entries(MONTH_GOALS).filter(([m,g])=>{
+    const mn=DAYS.filter(d=>d.mon===parseInt(m)).reduce((s,d)=>{const dd=getDayData(d.iso);return s+(dd?dd.net:0);},0);
+    return mn>=g*0.95;
+  }).length;
+  document.getElementById('a-ytd').textContent=fK(ytd);
+  document.getElementById('a-ytd-sub').textContent=actD+' days actual';
+  const vsEl=document.getElementById('a-vs');vsEl.textContent=(diff>=0?'+':'')+fK(diff);vsEl.className='av '+(diff>=0?'good':'bad');
+  document.getElementById('a-fy').textContent=fK(fyP);
+  const yEl=document.getElementById('a-yoy');yEl.textContent=(yoyP>=0?'+':'')+yoyP.toFixed(1)+'%';yEl.className='av '+(yoyP>=0?'good':'bad');
+  document.getElementById('a-roas').textContent=roasD>0?(roasN/roasD).toFixed(1)+'x':'--';
+  document.getElementById('a-margin').textContent=margC>0?pct(margS/margC):'--';
+  document.getElementById('a-track').textContent=onTrack+'/12';
+}
+
+// Overview cards
+function buildOverview(){
+  const grid=document.getElementById('mo-grid');grid.innerHTML='';
+  for(let m=1;m<=12;m++){
+    const md=DAYS.filter(d=>d.mon===m);
+    const mNet=md.reduce((s,d)=>{const dd=getDayData(d.iso);return s+(dd?dd.net:0);},0);
+    const mGoal=MONTH_GOALS[m];const m25=MONTHLY_2025[String(m)]?.net||0;
+    const yoy=m25>0?(mNet-m25)/m25*100:0;
+    const fp=Math.min(100,Math.round(mNet/mGoal*100));
+    const fc=mNet>=mGoal*0.95?'#3B6D11':mNet>=mGoal*0.8?'#BA7517':'#E24B4A';
+    const actDays=md.filter(d=>getDayData(d.iso)?.isAct).length;
+    const card=document.createElement('div');card.className='mo-card';
+    card.innerHTML=`<div class="mo-name">${MONTH_NAMES[m-1]}</div><div class="mo-net">${fK(mNet)}<span style="font-size:11px;color:var(--bark);font-family:'DM Sans',sans-serif;font-weight:400"> / ${fK(mGoal)}</span></div><div class="mo-meta"><span class="mo-tag" style="color:${fc}">${fp}% to goal</span>${actDays>0?`<span class="mo-tag" style="color:#3B6D11">${actDays}d actual</span>`:''}</div><div class="mo-prog"><div class="mo-fill" style="width:${fp}%;background:${fc}"></div></div><div class="mo-yoy" style="color:${clr(yoy)}">${yoy>=0?'+':''}${yoy.toFixed(1)}% vs 2025</div>`;
+    card.onclick=()=>{showTab('planner');setTimeout(()=>scrollToMonth(m),60);};
+    grid.appendChild(card);
+  }
+  buildOvChart();
+}
+
+function buildOvChart(){
+  const lbl=MONTH_NAMES.map(m=>m.slice(0,3));
+  const proj=[],goals=[],y25=[];
+  for(let m=1;m<=12;m++){const md=DAYS.filter(d=>d.mon===m);proj.push(Math.round(md.reduce((s,d)=>{const dd=getDayData(d.iso);return s+(dd?dd.net:0);},0)));goals.push(MONTH_GOALS[m]);y25.push(MONTHLY_2025[String(m)]?.net||0);}
+  if(window._ovC)window._ovC.destroy();
+  window._ovC=new Chart(document.getElementById('ov-chart'),{type:'bar',data:{labels:lbl,datasets:[{label:'2026',data:proj,backgroundColor:'#3D2E22',borderRadius:3},{label:'Goal',data:goals,backgroundColor:'#C4B8A8',borderRadius:3},{label:'2025',data:y25,backgroundColor:'#9FE1CB',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M',font:{size:9},color:'#8C7B6B'},grid:{color:'rgba(61,46,34,0.07)'}},x:{ticks:{font:{size:10},color:'#8C7B6B'},grid:{display:false}}}}});
+}
+
+function buildMonthNav(){
+  const nav=document.getElementById('month-nav');nav.innerHTML='';
+  MONTH_NAMES.forEach((mn,i)=>{const btn=document.createElement('button');btn.className='nt';btn.style.cssText='padding:3px 9px;font-size:10px';btn.textContent=mn.slice(0,3);btn.onclick=()=>scrollToMonth(i+1);nav.appendChild(btn);});
+}
+function scrollToMonth(m){const el=document.getElementById('mo-anchor-'+m);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
+
+// ── MAIN PLANNER ─────────────────────────────────────────
+function buildPlanner(){
+  const tbody=document.getElementById('plan-body');tbody.innerHTML='';
+  const evKeys=Object.keys(LIFT);
+  let curMon=0,curWk=null,wkNet=0,wkGoal=0,wkActNet=0,wkActDays=0,wkRow=null;
+
+  function flushWk(){
+    if(!wkRow) return;
+    const diff=wkNet-wkGoal;
+    wkRow.querySelector('.wg').textContent=fK(wkGoal);
+    wkRow.querySelector('.wn').textContent=fK(wkNet);
+    const wv=wkRow.querySelector('.wv');wv.textContent=(diff>=0?'+':'')+fK(diff);wv.style.color=diff>=0?'#3B6D11':'#A32D2D';
+    if(wkActDays>0){
+      const wa=wkRow.querySelector('.wa');
+      wa.textContent=fK(wkActNet)+' actual · '+fK(wkNet-wkActNet)+' proj remaining';
+    }
+  }
+
+  DAYS.forEach(day=>{
+    const dd=getDayData(day.iso);if(!dd) return;
+
+    // Month header
+    if(day.mon!==curMon){
+      curMon=day.mon;
+      const mDays=DAYS.filter(d=>d.mon===day.mon);
+      const mNet=mDays.reduce((s,d)=>{const dd2=getDayData(d.iso);return s+(dd2?dd2.net:0);},0);
+      const mGoal=MONTH_GOALS[day.mon];const diff=mNet-mGoal;
+      const mActNet=mDays.filter(d=>getDayData(d.iso)?.isAct).reduce((s,d)=>{const dd2=getDayData(d.iso);return s+(dd2?dd2.net:0);},0);
+      const mActD=mDays.filter(d=>getDayData(d.iso)?.isAct).length;
+      const m25=MONTHLY_2025[String(day.mon)]?.net||0;
+      const yoy=m25>0?(mNet-m25)/m25*100:0;
+      const ar=document.createElement('tr');ar.id='mo-anchor-'+day.mon;
+      // Count locked future days for this month
+    const mLockedDays=DAYS.filter(d=>d.mon===day.mon&&!ACTUALS_2026[d.iso]&&lockedProj[d.iso]).length;
+    const mFutureDays=DAYS.filter(d=>d.mon===day.mon&&!ACTUALS_2026[d.iso]).length;
+    ar.innerHTML=`<td colspan="17" style="padding:0;border:none"><div style="padding:7px 10px 6px;background:var(--esp);display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <span style="font-family:'Playfair Display',serif;font-size:13px;color:#fff;letter-spacing:.04em">${MONTH_NAMES[day.mon-1]} 2026</span>
+      <span style="font-size:11px;color:rgba(255,255,255,.55)">Goal:
+        <input type="number" value="${mGoal}" onchange="setMonthGoal(${day.mon},this.value)"
+          style="width:72px;font-size:11px;padding:1px 4px;border:1px solid rgba(255,255,255,.3);border-radius:3px;background:rgba(255,255,255,.1);color:#fff;font-family:'DM Sans',sans-serif;text-align:right"
+          onclick="event.stopPropagation()" />
+      </span>
+      <span style="font-size:11px;color:rgba(255,255,255,.55)">Proj ${fK(mNet)}</span>
+      <span style="font-size:11px;font-weight:500;color:${diff>=0?'#8FCA5A':'#F09595'}">${diff>=0?'+':''}${fK(diff)} vs goal</span>
+      ${mActD>0?`<span style="font-size:11px;color:rgba(255,255,255,.45)">${fK(mActNet)} actual (${mActD}d)</span>`:''}
+      ${mFutureDays>0?`<span style="font-size:11px;color:rgba(255,255,255,.4)">${mLockedDays}/${mFutureDays} proj locked</span>`:''}
+      ${(()=>{
+        const mModelTotal=DAYS.filter(d=>d.mon===day.mon).reduce((s,d)=>{const dd2=getDayData(d.iso);return s+(dd2?dd2.modelSug:0);},0);
+        const gap=mGoal-mModelTotal;
+        if(gap<=0) return '<span style="font-size:11px;color:#8FCA5A">✓ model on track</span>';
+        return '<span style="font-size:10px;background:rgba(240,149,149,.15);color:#F09595;padding:2px 7px;border-radius:10px">⚠ '+fK(gap)+' model gap — see Event Rec column</span>';
+      })()}
+      <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <span style="font-size:11px;color:${yoy>=0?'#8FCA5A':'#F09595'}">${yoy>=0?'+':''}${yoy.toFixed(1)}% YOY</span>
+        ${mFutureDays>0?`
+        <button onclick="lockMonth(${day.mon})" style="font-size:10px;padding:2px 8px;border:1px solid rgba(255,255,255,.3);border-radius:3px;background:transparent;color:rgba(255,255,255,.75);cursor:pointer;font-family:'DM Sans',sans-serif" onmouseover="this.style.background='rgba(255,255,255,.12)'" onmouseout="this.style.background='transparent'">&#128274; Lock Month</button>
+        <button onclick="unlockMonth(${day.mon})" style="font-size:10px;padding:2px 8px;border:1px solid rgba(255,255,255,.2);border-radius:3px;background:transparent;color:rgba(255,255,255,.45);cursor:pointer;font-family:'DM Sans',sans-serif" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background='transparent'">&#128275; Unlock</button>
+        `:''}
+      </span>
+    </div></td>`;
+      tbody.appendChild(ar);
+    }
+
+    // Week row — new week when Mon or first day of month
+    const wk=day.wkNum;
+    if(wk!==curWk){
+      flushWk();curWk=wk;wkNet=0;wkGoal=0;wkActNet=0;wkActDays=0;
+      // Calculate week date range
+      const wkMon=getWeekMonday(day.iso);
+      const wkSun=new Date(wkMon.getFullYear(),wkMon.getMonth(),wkMon.getDate()+6);
+      const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
+      wkRow=document.createElement('tr');wkRow.className='week-row';
+      wkRow.innerHTML=`<td colspan="6" style="font-size:10px;color:var(--bark);padding:5px 8px;font-weight:500">W${wk} &nbsp;·&nbsp; ${fmt(wkMon)}&ndash;${fmt(wkSun)}</td><td class="r wg" style="font-size:10px;color:var(--bark)">--</td><td class="r wn" style="font-size:11px;font-weight:500">--</td><td class="r wv" style="font-size:11px;font-weight:500">--</td><td class="wa" colspan="7" style="font-size:10px;color:var(--forest);padding-left:12px"></td>`;
+      tbody.appendChild(wkRow);
+    }
+    wkNet+=dd.net;wkGoal+=dd.goal;
+    if(dd.isAct){wkActNet+=dd.net;wkActDays++;}
+
+    const fc=dd.diff>=0?'#3B6D11':'#E24B4A';
+    const retC={low:'#3B6D11',med:'#BA7517',high:'#A32D2D'}[dd.retRisk];
+    const locked=dd.hasCSV;
+    const opts=evKeys.map(k=>`<option value="${k}"${k===dd.evName?' selected':''}>${k}</option>`).join('');
+    const ua=getUA(day.iso);
+    const inp=(key,ph,w,val)=>!locked?`<input class="ai${val!=null?' filled':''}" style="width:${w}px" type="number" placeholder="${ph}" value="${val!=null?val:''}" onchange="doSetUA('${day.iso}','${key}',this.value)" />`:`<span style="font-size:11px;color:var(--forest)">${val!=null?Math.round(val).toLocaleString():'--'}</span>`;
+    const yD=dd.yoy25!=null?dd.net-dd.yoy25:null;
+
+    // ── Three columns: Goal | Projected | Actual ────────
+    const basis=dd.evName==='None'?'BAU':dd.evName.replace('Early Access-','EA-').replace('Sitewide','SW').replace(' + New Capsule','+Cap');
+    const liftVal=getLift(day.dow,dd.evName);
+    // Projected column — always shown, driven by event type model
+    const isLocked=!!lockedProj[day.iso];
+    const projCell=dd.isAct?
+      // Actual day — no lock toggle needed
+      `<div style="text-align:right">
+        <div style="font-size:12px;font-weight:500;color:var(--char)">${f$(dd.projNet)}</div>
+        <div style="font-size:9px;color:var(--bark);margin-top:1px">${basis} &middot; ${liftVal.toFixed(2)}x</div>
+      </div>` :
+      // Future day — show lock toggle
+      `<div style="display:flex;align-items:flex-start;justify-content:flex-end;gap:6px">
+        <div style="text-align:right">
+          <div style="font-size:12px;font-weight:500;color:${isLocked?'var(--forest)':'var(--char)'}">${f$(dd.projNet)}</div>
+          <div style="font-size:9px;color:var(--bark);margin-top:1px">${basis} &middot; ${liftVal.toFixed(2)}x</div>
+        </div>
+        <button onclick="toggleLock('${day.iso}')" title="${isLocked?'Unlock projection':'Lock projection'}"
+          style="font-size:12px;background:none;border:none;cursor:pointer;padding:1px 2px;opacity:${isLocked?'1':'0.3'};color:${isLocked?'var(--forest)':'var(--char)'};line-height:1;margin-top:1px"
+          onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='${isLocked?'1':'0.3'}'">
+          ${isLocked?'&#128274;':'&#128275;'}
+        </button>
+      </div>`;
+    // Actual column — green if real data, input field if future
+    let actualCell;
+    if(dd.hasCSV){
+      actualCell=`<div style="text-align:right">
+        <div style="font-size:12px;font-weight:500;color:var(--forest)">${f$(dd.net)}</div>
+        <div style="font-size:9px;color:var(--forest);margin-top:1px;opacity:.7">actual</div>
+      </div>`;
+    } else if(dd.hasUA){
+      actualCell=`<div style="text-align:right">
+        <div style="font-size:12px;font-weight:500;color:var(--forest)">${f$(dd.net)}</div>
+        <div style="font-size:9px;color:var(--forest);margin-top:1px;opacity:.7">actual</div>
+      </div>`;
+    } else {
+      // Future — show input field
+      actualCell=`<div style="text-align:right">${inp('net','enter $',84,ua.net)}</div>`;
+    }
+    // vs Goal uses actual if available, else projection
+    const vsBase=dd.isAct?dd.net:dd.projNet;
+    const vsDiff=vsBase-dd.goal;
+
+    const tr=document.createElement('tr');
+    if(day.isToday) tr.className='today-row';
+    else if(dd.isAct) tr.className='has-act';
+    else if(day.special) tr.className='special-row';
+
+    tr.innerHTML=`
+      <td class="muted" style="font-size:10px">${day.day}</td>
+      <td style="font-weight:500;font-size:11px;white-space:nowrap;min-width:110px">
+        ${day.iso.slice(5).replace('-','/')}
+        ${day.isToday?'<span class="badge badge-today">today</span>':''}
+        ${day.special?`<span class="badge badge-sp">${day.special}</span>`:''}
+        ${getNote(day.iso)?`<span class="badge badge-note" title="Click to edit" onclick="promptNote('${day.iso}')">${getNote(day.iso)}</span>`:`<span class="badge" style="background:transparent;border:1px dashed var(--bd);color:var(--bark);opacity:.4;cursor:pointer;font-size:9px" onclick="promptNote('${day.iso}')" title="Add callout">+ note</span>`}
+      </td>
+      <td class="muted" style="font-size:11px">${day.dow}</td>
+      <td>${locked?`<span style="font-size:11px;color:var(--bark)">${dd.evName}</span>`:`<select class="ev" onchange="doSetEv('${day.iso}',this.value)">${opts}</select>`}</td>
+      <td class="r" style="font-size:11px;min-width:90px">
+        <input class="ai${userGoals[day.iso]!=null?' filled':''}" style="width:82px;text-align:right" type="number"
+          value="${dd.goal}" placeholder="goal"
+          onchange="doSetGoal('${day.iso}',this.value)" />
+        <div class="prog"><div class="pf" style="width:${Math.min(100,Math.round(vsBase/dd.goal*100))}%;background:${vsDiff>=0?'#3B6D11':'#E24B4A'}"></div></div>
+      </td>
+      <td class="r" style="font-size:11px;min-width:88px">
+        <div style="color:var(--sky);font-weight:500">${f$(dd.modelSug)}</div>
+        <div style="font-size:9px;color:var(--bark);margin-top:1px">${(()=>{const diff=dd.modelSug-dd.goal;return diff===0?'':((diff>0?'+':'')+f$(diff)+' vs goal');})()}</div>
+      </td>
+                              <td style="font-size:10px;min-width:160px">${(()=>{
+        if(dd.isAct) return '<span style="color:var(--forest);font-size:10px">actual</span>';
+        const dayDate=new Date(day.iso.replace(/-/g,'/'));
+        if(dayDate<TODAY) return '<span style="color:var(--bark)">&#8212;</span>';
+        // Already has a promo assigned
+        const cEv=getEv(day.iso);
+        if(PROMO_EVENTS.has(cEv)) return '<span style="font-size:10px;color:var(--forest)">&#10003; '+cEv.replace('Early Access-','EA ').replace('Sitewide','SW').replace(' + New Capsule','+Cap')+'</span>';
+        // Week/month context
+        const wkDays=DAYS.filter(d=>d.wkNum===day.wkNum);
+        const wkHasSitewide=wkDays.some(d=>getEv(d.iso).includes('Sitewide'));
+        const mDays=DAYS.filter(d=>d.mon===day.mon);
+        const mPromos=mDays.filter(d=>PROMO_EVENTS.has(getEv(d.iso))).length;
+        const promoRatio=mPromos/mDays.length;
+        const dow=day.dow;
+        let rec=null,rc='',rb='',note='';
+        if(dow==='Mon'){
+          // Monday always gets OOTW + New Capsule
+          rec='OOTW + New Capsule';rc='#3B6D11';rb='#EAF3DE';note='standard Mon';
+        } else if(dow==='Thu'){
+          // Thursday — EA if sitewide weekend coming, otherwise None
+          if(wkHasSitewide){
+            rec='Early Access-Sitewide 40';rc='#185FA5';rb='#E6F1FB';note='EA before SW wknd';
+          }
+        } else if(dow==='Fri'||dow==='Sat'||dow==='Sun'){
+          // Weekend — Sitewide if already planned this week, otherwise None
+          if(wkHasSitewide){
+            rec='Sitewide 40';rc='#A32D2D';rb='#FCEBEB';note='SW wknd';
+          }
+          // Otherwise leave as None — weekends are fine BAU
+        }
+        // Tue/Wed always None
+        if(!rec){
+          return '<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:#F0EDE6;color:#8C7B6B;white-space:nowrap">None</span>';
+        }
+        const liftInc=(LIFT[rec]||{lift:1}).lift-1;
+        const addedRev=Math.round((DOW_BASE[day.dow]||{net:0}).net*liftInc);
+        const iso=day.iso;
+        const label=rec.replace('Early Access-','EA ').replace('Sitewide','SW').replace(' + New Capsule','+Cap');
+        return `<button onclick="applyRec('${iso}','${rec}')" style="font-size:10px;padding:2px 7px;border-radius:8px;border:none;background:${rb};color:${rc};cursor:pointer;white-space:nowrap;line-height:1.5" title="${note} — click to apply"><strong>${label}</strong> +${f$(addedRev)}</button>`;
+      })()}</td>
+      <td>${projCell}</td>
+      <td>${actualCell}</td>
+      <td class="r" style="color:${vsDiff>=0?'#3B6D11':'#E24B4A'};font-weight:500;font-size:11px">${vsDiff>=0?'+':''}${f$(vsDiff)}</td>
+      <td class="r" style="${dd.isAct?'color:var(--forest);font-weight:500':''};font-size:11px">${dd.roas!=null?dd.roas.toFixed(1)+'x':dd.ev.mer.toFixed(1)+'x'}</td>
+      <td class="r" style="${dd.isAct?'color:var(--forest);font-weight:500':''};font-size:11px">${dd.cvr!=null?pct(dd.cvr):pct(dd.ev.cvr)}</td>
+      <td class="r" style="font-size:11px;color:var(--bark)">${pct(dd.projMargin)}</td>
+      <td class="r" style="font-size:11px;${dd.actualMargin!=null?'color:var(--forest);font-weight:500':'color:var(--tan)'}">${dd.actualMargin!=null?pct(dd.actualMargin):'—'}</td>
+      <td class="r" style="font-size:11px;color:var(--bark)">${fN(dd.sessions)}</td>
+      <td class="r" style="color:${retC};font-size:11px">${f$(dd.estReturns)}</td>
+      <td class="r muted" style="font-size:11px">${dd.yoy25!=null?f$(dd.yoy25):'--'}</td>
+      <td class="r" style="color:${yD!=null?clr(yD):'inherit'};font-size:11px">${yD!=null?(yD>=0?'+':'')+fK(yD):'--'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  flushWk();
+}
+
+// Actuals entry tab
+function buildActualsTab(filterMon){
+  const tbody=document.getElementById('act-body');tbody.innerHTML='';
+  const days=filterMon?DAYS.filter(d=>d.mon===filterMon):DAYS;
+  let totNet=0,totSess=0,totOrd=0,totSpend=0,totRet=0,totNew=0,totRetC=0,totMargin=0,marginDays=0,actDays=0;
+
+  days.forEach(day=>{
+    const dd=getDayData(day.iso);if(!dd) return;
+    const ua=getUA(day.iso);
+    if(dd.isAct){
+      actDays++;
+      if(dd.net) totNet+=dd.net;
+      if(dd.sessions) totSess+=dd.sessions;
+      if(dd.orders) totOrd+=dd.orders;
+      if(dd.spend) totSpend+=dd.spend;
+      if(dd.returns) totRet+=dd.returns;
+      if(dd.actualMargin!=null){totMargin+=dd.actualMargin;marginDays++;}
+      if(dd.newCust) totNew+=dd.newCust;
+      if(dd.retCust) totRetC+=dd.retCust;
+    }
+    // All fields always editable — CSV values shown as green pre-filled baseline
+    // ua (user override) takes priority, then csv value, then blank
+    // All actuals in ua (localStorage) — no separate CSV layer
+    const fieldVal=(key)=>ua[key]!=null?ua[key]:null;
+    const isCsvVal=(key)=>false; // no longer distinguishing CSV vs user-entered
+    const inp=(key,ph,w)=>{
+      const val=fieldVal(key);
+      const fromCsv=isCsvVal(key);
+      const displayVal=val!=null?(key==='returns'?Math.abs(val):val):null;
+      return `<input class="ai${displayVal!=null?' filled':''}" style="width:${w}px;${''}" type="number" placeholder="${ph}" value="${displayVal!=null?displayVal:''}" onchange="doSetUA('${day.iso}','${key}',this.value)" />`;
+    };
+    const effSess=fieldVal('sessions');const effOrd=fieldVal('orders');
+    const effNet=fieldVal('net');const effSpend=fieldVal('spend');
+    const liveCVR=effSess&&effOrd?pct(effOrd/effSess):'--';
+    const liveROAS=effNet&&effSpend?(effNet/effSpend).toFixed(1)+'x':'--';
+    const tr=document.createElement('tr');
+    if(dd.hasCSV||dd.hasUA) tr.className='has-act';
+    tr.innerHTML=`
+      <td style="font-weight:500;font-size:11px;white-space:nowrap">${day.iso.slice(5).replace('-','/')} <span style="color:var(--bark);font-weight:400">${day.dow}</span></td>
+      <td style="padding:4px 7px">${(()=>{
+        const evKeys=Object.keys(LIFT);
+        const opts=evKeys.map(k=>`<option value="${k}"${k===dd.evName?' selected':''}>${k}</option>`).join('');
+        return `<select class="ev" style="min-width:140px;width:100%" onchange="doSetEv('${day.iso}',this.value)">${opts}</select>`;
+      })()}</td>
+      <td class="r" style="border-left:1px solid var(--bd)">${inp('net','net rev$',84)}</td>
+      <td class="r">${inp('returns','returns',74)}</td>
+      <td class="r" style="border-left:1px solid var(--bd)">${inp('sessions','sessions',72)}</td>
+      <td class="r">${inp('orders','orders',62)}</td>
+      <td class="r" style="color:var(--forest);font-size:11px">${liveCVR}</td>
+      <td class="r" style="border-left:1px solid var(--bd)">${inp('spend','ad spend',78)}</td>
+      <td class="r" style="color:var(--forest);font-size:11px">${liveROAS}</td>
+      <td class="r" style="border-left:1px solid var(--bd)">${(()=>{
+        const v=fieldVal('actualMargin');const fromCsv=isCsvVal('actualMargin');
+        const display=v!=null?Math.round(v*1000)/10:null;
+        return `<input class="ai${display!=null?' filled':''}" style="width:62px;${''}" type="number" step="0.1" placeholder="%" value="${display!=null?display:''}" onchange="doSetUA('${day.iso}','actualMargin',parseFloat(this.value)/100)" />`;
+      })()}</td>
+      <td class="r" style="border-left:1px solid var(--bd)">${inp('newCust','new cust',62)}</td>
+      <td class="r">${inp('retCust','ret cust',62)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('at-net').textContent=actDays?fK(totNet):'--';
+  document.getElementById('at-sess').textContent=actDays?fN(totSess):'--';
+  document.getElementById('at-ord').textContent=actDays?totOrd.toLocaleString():'--';
+  document.getElementById('at-cvr').textContent=totSess&&totOrd?pct(totOrd/totSess):'--';
+  document.getElementById('at-spend').textContent=actDays?f$(totSpend):'--';
+  document.getElementById('at-roas').textContent=totSpend&&totNet?(totNet/totSpend).toFixed(1)+'x':'--';
+  document.getElementById('at-ret').textContent=actDays?f$(totRet):'--';
+  document.getElementById('at-margin').textContent=marginDays?pct(totMargin/marginDays):'--';
+  document.getElementById('at-new').textContent=actDays?totNew.toLocaleString():'--';
+  document.getElementById('at-retc').textContent=actDays?totRetC.toLocaleString():'--';
+}
+
+let actFilterMon=null;
+let curActTab=false;
+
+function getNote(iso){return userNotes[iso]||'';}
+function setNote(iso,val){
+  if(!val||val.trim()==='') delete userNotes[iso];
+  else userNotes[iso]=val.trim();
+  lsSet('un',userNotes);
+}
+function doSetNote(iso,val){setNote(iso,val);buildPlanner();}
+
+function doSetGoal(iso,val){
+  setGoal(iso,val);
+  // If locked, clear so projection recomputes with new goal
+  if(lockedProj[iso]){delete lockedProj[iso];lsSet('lp',lockedProj);}
+  buildPlanner();buildOverview();updateAnnual();if(_chartsBuilt)_updateCharts();
+}
+function applyRec(iso,ev){doSetEv(iso,ev);}
+function doSetEv(iso,val){
+  setEv(iso,val);
+  // If projection was manually locked, clear it so it recomputes for new event type
+  if(lockedProj[iso]){delete lockedProj[iso];lsSet('lp',lockedProj);}
+  buildPlanner();if(curActTab)buildActualsTab(actFilterMon);buildOverview();updateAnnual();if(_chartsBuilt)_updateCharts();
+}
+function doSetUA(iso,key,val){setUA(iso,key,val);recalcBaseline();buildPlanner();if(curActTab)buildActualsTab(actFilterMon);buildOverview();updateAnnual();if(_chartsBuilt)_updateCharts();}
+
+// Charts
+let _chartsBuilt=false;
+function _initCharts(){if(_chartsBuilt)return;_chartsBuilt=true;_updateCharts();}
+function _updateCharts(){
+  if(!_chartsBuilt) return;
+  // Build weekly data using TBN week numbers
+  const wkMap={};
+  DAYS.forEach(day=>{
+    const dd=getDayData(day.iso);if(!dd)return;
+    const k='W'+String(day.wkNum).padStart(2,'0');
+    if(!wkMap[k])wkMap[k]={net:0,goal:0,spend:0,margin:0,mc:0,isAct:false};
+    wkMap[k].net+=dd.net;wkMap[k].goal+=dd.goal;
+    if(dd.spend)wkMap[k].spend+=dd.spend;
+    if(dd.margin){wkMap[k].margin+=dd.margin;wkMap[k].mc++;}
+    if(dd.isAct)wkMap[k].isAct=true;
+  });
+  const wks=Object.keys(wkMap).sort();
+  const wn=wks.map(k=>Math.round(wkMap[k].net));
+  const wg=wks.map(k=>Math.round(wkMap[k].goal));
+  const wc=wks.map(k=>wkMap[k].isAct?'#3D2E22':'#3B6D11');
+  const wr=wks.map(k=>wkMap[k].spend>0?parseFloat((wkMap[k].net/wkMap[k].spend).toFixed(2)):null);
+  const wm=wks.map(k=>wkMap[k].mc>0?parseFloat((wkMap[k].margin/wkMap[k].mc*100).toFixed(1)):null);
+  const tO={font:{size:8},maxRotation:45,autoSkip:true,color:'#8C7B6B'};
+  const gO={color:'rgba(61,46,34,0.07)'};
+  if(window._wkC)window._wkC.destroy();
+  window._wkC=new Chart(document.getElementById('wk-chart'),{type:'bar',data:{labels:wks,datasets:[{data:wn,backgroundColor:wc,borderRadius:2},{data:wg,backgroundColor:'#C4B8A8',borderRadius:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'$'+Math.round(v/1e3)+'K',font:{size:9},color:'#8C7B6B'},grid:gO},x:{ticks:tO,grid:{display:false}}}}});
+  if(window._roasC)window._roasC.destroy();
+  window._roasC=new Chart(document.getElementById('roas-chart'),{type:'line',data:{labels:wks,datasets:[{data:wr,borderColor:'#185FA5',backgroundColor:'rgba(24,95,165,0.07)',tension:.3,pointRadius:2,pointBackgroundColor:'#185FA5',spanGaps:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:3,ticks:{callback:v=>v+'x',font:{size:9},color:'#8C7B6B'},grid:gO},x:{ticks:tO,grid:{display:false}}}}});
+  if(window._margC)window._margC.destroy();
+  window._margC=new Chart(document.getElementById('margin-chart'),{type:'line',data:{labels:wks,datasets:[{data:wm,borderColor:'#3B6D11',backgroundColor:'rgba(59,109,17,0.07)',tension:.3,pointRadius:2,pointBackgroundColor:'#3B6D11',spanGaps:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:40,max:72,ticks:{callback:v=>v+'%',font:{size:9},color:'#8C7B6B'},grid:gO},x:{ticks:tO,grid:{display:false}}}}});
+}
+
+// YOY
+function buildYOY(){
+  const tbody=document.getElementById('yoy-body');tbody.innerHTML='';
+  let t26=0,t25=0,tG=0;const p26=[],a25=[];
+  for(let m=1;m<=12;m++){
+    const md=DAYS.filter(d=>d.mon===m);
+    const mn=md.reduce((s,d)=>{const dd=getDayData(d.iso);return s+(dd?dd.net:0);},0);
+    const m25=MONTHLY_2025[String(m)]?.net||0;const mG=MONTH_GOALS[m];
+    const yD=mn-m25;const yP=m25>0?yD/m25*100:0;const vG=mn-mG;
+    p26.push(Math.round(mn));a25.push(Math.round(m25));t26+=mn;t25+=m25;tG+=mG;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td style="font-weight:500">${MONTH_NAMES[m-1]}</td><td class="r">${fK(mG)}</td><td class="r">${fK(mn)}</td><td class="r">${fK(m25)}</td><td class="r" style="color:${clr(yD)};font-weight:500">${yD>=0?'+':''}${fK(yD)}</td><td class="r" style="color:${clr(yP)}">${yP>=0?'+':''}${yP.toFixed(1)}%</td><td class="r" style="color:${clr(vG)}">${vG>=0?'+':''}${fK(vG)}</td><td class="r">${(mn/mG*100).toFixed(1)}%</td>`;
+    tbody.appendChild(tr);
+  }
+  const tYD=t26-t25;const tYP=t25>0?tYD/t25*100:0;const tVG=t26-tG;
+  document.getElementById('yoy-ft-goal').textContent=fK(tG);document.getElementById('yoy-ft-26').textContent=fK(t26);document.getElementById('yoy-ft-25').textContent=fK(t25);
+  document.getElementById('yoy-ft-delta').textContent=(tYD>=0?'+':'')+fK(tYD);document.getElementById('yoy-ft-pct').textContent=(tYP>=0?'+':'')+tYP.toFixed(1)+'%';
+  document.getElementById('yoy-ft-vsg').textContent=(tVG>=0?'+':'')+fK(tVG);document.getElementById('yoy-ft-gpct').textContent=(t26/tG*100).toFixed(1)+'%';
+  if(window._yoyC)window._yoyC.destroy();
+  window._yoyC=new Chart(document.getElementById('yoy-chart'),{type:'bar',data:{labels:MONTH_NAMES.map(m=>m.slice(0,3)),datasets:[{label:'2026',data:p26,backgroundColor:'#3D2E22',borderRadius:3},{label:'2025',data:a25,backgroundColor:'#9FE1CB',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M',font:{size:9},color:'#8C7B6B'},grid:{color:'rgba(61,46,34,0.07)'}},x:{ticks:{font:{size:10},color:'#8C7B6B'},grid:{display:false}}}}});
+}
+
+// Benchmarks
+function buildBenchmarks(){
+  const tbody=document.getElementById('bench-body');
+  if(!tbody){console.error('bench-body not found');return;}
+  tbody.innerHTML='';
+  const bc={High:'background:#EAF3DE;color:#085041',Medium:'background:#E6F1FB;color:#185FA5',Low:'background:#FCEBEB;color:#712B13'};
+  for(const [name,ev] of Object.entries(LIFT)){
+    const band=BAND[name]||'Medium';const rr=ev.retRate<0.08?'Low':ev.retRate<0.11?'Med':'High';const rc={'Low':'#3B6D11','Med':'#BA7517','High':'#A32D2D'};
+    const pd=dow=>{const o=DOW_OVR[dow];const l=(o&&o[name]!==undefined)?o[name]:ev.lift;return f$(DOW_BASE[dow].net*l);};
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td style="font-weight:500">${name}</td><td class="r">${ev.lift.toFixed(2)}x</td><td class="r">${pct(ev.margin)}</td><td class="r">${ev.mer.toFixed(2)}x</td><td class="r">${pct(ev.cvr)}</td><td class="r">${pd('Mon')}</td><td class="r">${pd('Fri')}</td><td class="r">${pd('Sat')}</td><td class="r">${pd('Sun')}</td><td class="r" style="color:${rc[rr]};font-weight:500">${rr} (${pct(ev.retRate)})</td><td><span style="font-size:10px;padding:1px 6px;border-radius:8px;font-weight:500;${bc[band]}">${band}</span></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+// Tab switching
+function showTab(name){
+  ['overview','planner','actuals','charts','yoy','benchmarks'].forEach(t=>document.getElementById('tab-'+t).style.display=t===name?'':'none');
+  document.querySelectorAll('.nt-main').forEach((b,i)=>b.className='nt nt-main'+(['overview','planner','actuals','charts','yoy','benchmarks'][i]===name?' active':''));
+  curActTab=(name==='actuals');
+  if(name==='actuals') buildActualsTab(actFilterMon);
+  if(name==='charts') _initCharts();
+  if(name==='yoy') buildYOY();
+  if(name==='benchmarks') setTimeout(buildBenchmarks,10);
+}
+
+// Set sticky header offset dynamically based on actual rendered heights
+function setStickyOffset(){
+  const hdr=document.querySelector('header');
+  const ann=document.querySelector('.ann-bar');
+  const nav=document.querySelector('.nav');
+  if(!hdr||!ann||!nav) return;
+  const hdrH=Math.round(hdr.getBoundingClientRect().height);
+  const annH=Math.round(ann.getBoundingClientRect().height);
+  nav.style.top=(hdrH+annH)+'px';
+  const navH=Math.round(nav.getBoundingClientRect().height);
+  const off=hdrH+annH+navH;
+  document.querySelectorAll('thead tr:not(.grp-hdr) th').forEach(th=>th.style.top=off+'px');
+  // Actuals tab has a two-row header: grp-hdr sticks at off, data row sticks at off+grp height
+  document.querySelectorAll('thead tr.grp-hdr th').forEach(th=>th.style.top=off+'px');
+  document.querySelectorAll('thead tr.grp-hdr').forEach(row=>{
+    const next=row.nextElementSibling;
+    if(next) next.querySelectorAll('th').forEach(th=>th.style.top=(off+row.getBoundingClientRect().height)+'px');
+  });
+}
+
+// ── Preloaded state from last export ─────────────────────────────────────────
+(function(){
+  const saved={ev:{"2026-03-29":"None","2026-04-03":"None","2026-04-04":"None","2026-04-05":"Early Access-Sitewide 33","2026-04-10":"PPT","2026-04-11":"PPT","2026-04-12":"PPT","2026-04-13":"OOTW + New Capsule","2026-04-14":"None","2026-04-17":"None","2026-04-18":"None","2026-04-19":"None","2026-04-20":"OOTW + New Capsule","2026-04-21":"None","2026-04-25":"None","2026-04-26":"None","2026-04-27":"OOTW + New Capsule","2026-04-28":"None","2026-01-01":"Sitewide 40","2026-01-02":"PPT","2026-01-03":"PPT","2026-01-04":"PPT","2026-01-09":"PPT","2026-01-10":"PPT","2026-01-11":"PPT","2026-01-23":"Sitewide-Tiered","2026-01-24":"Sitewide-Tiered","2026-01-25":"Sitewide-Tiered","2026-02-12":"Early Access-Sitewide 40","2026-02-13":"Sitewide 40","2026-02-14":"Sitewide 40","2026-02-15":"Sitewide 40","2026-02-16":"Sitewide 40","2026-02-17":"OOTW + New Capsule","2026-02-20":"Boho Bliss","2026-02-21":"Boho Bliss","2026-02-22":"Boho Bliss","2026-03-13":"PPT","2026-03-14":"PPT","2026-03-15":"PPT","2026-03-20":"PPT","2026-03-21":"PPT","2026-03-22":"PPT","2026-05-27":"None","2026-05-26":"OOTW + New Capsule","2026-05-23":"Sitewide 40","2026-05-22":"Sitewide 40","2026-05-21":"Early Access-Sitewide 40"},ua:{"2026-01-01":{"net":162545.08,"returns":5577.54,"sessions":74167,"orders":1270,"spend":19747.25,"roas":8.23,"cvr":0.0171,"actualMargin":0.547,"newCust":566,"retCust":699},"2026-01-02":{"net":155232.55,"returns":17675.43,"sessions":84998,"orders":1476,"spend":15872.87,"roas":9.78,"cvr":0.0174,"actualMargin":0.291,"newCust":458,"retCust":988},"2026-01-03":{"net":103035.72,"returns":12825.87,"sessions":78553,"orders":899,"spend":17330.47,"roas":5.95,"cvr":0.0114,"actualMargin":0.502,"newCust":349,"retCust":529},"2026-01-04":{"net":111857.02,"returns":6975.22,"sessions":77382,"orders":942,"spend":16795.12,"roas":6.66,"cvr":0.0122,"actualMargin":0.522,"newCust":341,"retCust":583},"2026-01-05":{"net":48978.66,"returns":22543.35,"sessions":55351,"orders":567,"spend":11351.03,"roas":4.31,"cvr":0.0102,"actualMargin":0.582,"newCust":221,"retCust":333},"2026-01-06":{"net":42206.32,"returns":24007.44,"sessions":51217,"orders":515,"spend":11863.76,"roas":3.56,"cvr":0.0101,"actualMargin":0.617,"newCust":219,"retCust":291},"2026-01-07":{"net":46476.46,"returns":15130.92,"sessions":54441,"orders":465,"spend":12471.73,"roas":3.73,"cvr":0.0085,"actualMargin":0.62,"newCust":193,"retCust":262},"2026-01-08":{"net":44423.6,"returns":15030.32,"sessions":47369,"orders":474,"spend":10479.99,"roas":4.24,"cvr":0.01,"actualMargin":0.611,"newCust":216,"retCust":255},"2026-01-09":{"net":85056.43,"returns":15218.59,"sessions":68195,"orders":763,"spend":14904.9,"roas":5.71,"cvr":0.0112,"actualMargin":0.602,"newCust":296,"retCust":454},"2026-01-10":{"net":72198.63,"returns":13038.04,"sessions":59945,"orders":671,"spend":14016.36,"roas":5.15,"cvr":0.0112,"actualMargin":0.602,"newCust":329,"retCust":332},"2026-01-11":{"net":98653.14,"returns":6384.03,"sessions":65350,"orders":805,"spend":15221.55,"roas":6.48,"cvr":0.0123,"actualMargin":0.6,"newCust":343,"retCust":455},"2026-01-12":{"net":44304.14,"returns":22626.95,"sessions":53069,"orders":520,"spend":10308.03,"roas":4.3,"cvr":0.0098,"actualMargin":0.619,"newCust":186,"retCust":322},"2026-01-13":{"net":61515.77,"returns":18625.14,"sessions":52658,"orders":557,"spend":9705.46,"roas":6.34,"cvr":0.0106,"actualMargin":0.643,"newCust":235,"retCust":314},"2026-01-14":{"net":52835.86,"returns":16791.0,"sessions":47818,"orders":491,"spend":9973.8,"roas":5.3,"cvr":0.0103,"actualMargin":0.633,"newCust":216,"retCust":269},"2026-01-15":{"net":58524.56,"returns":11156.13,"sessions":55030,"orders":544,"spend":10701.08,"roas":5.47,"cvr":0.0099,"actualMargin":0.641,"newCust":231,"retCust":305},"2026-01-16":{"net":102690.1,"returns":13922.94,"sessions":66933,"orders":873,"spend":15364.1,"roas":6.68,"cvr":0.013,"actualMargin":0.603,"newCust":289,"retCust":556},"2026-01-17":{"net":102843.55,"returns":12650.26,"sessions":69698,"orders":855,"spend":15162.53,"roas":6.78,"cvr":0.0123,"actualMargin":0.587,"newCust":303,"retCust":527},"2026-01-18":{"net":126652.07,"returns":6086.77,"sessions":73650,"orders":945,"spend":17018.91,"roas":7.44,"cvr":0.0128,"actualMargin":0.586,"newCust":296,"retCust":634},"2026-01-19":{"net":60086.98,"returns":9352.18,"sessions":54741,"orders":534,"spend":10099.12,"roas":5.95,"cvr":0.0098,"actualMargin":0.612,"newCust":190,"retCust":339},"2026-01-20":{"net":43566.09,"returns":26100.47,"sessions":56445,"orders":495,"spend":10796.89,"roas":4.04,"cvr":0.0088,"actualMargin":0.594,"newCust":189,"retCust":297},"2026-01-21":{"net":47222.03,"returns":13322.86,"sessions":47076,"orders":443,"spend":9693.85,"roas":4.87,"cvr":0.0094,"actualMargin":0.597,"newCust":217,"retCust":221},"2026-01-22":{"net":59620.34,"returns":9228.33,"sessions":51848,"orders":518,"spend":10122.61,"roas":5.89,"cvr":0.01,"actualMargin":0.617,"newCust":184,"retCust":316},"2026-01-23":{"net":203747.9,"returns":13872.71,"sessions":93216,"orders":1382,"spend":23873.35,"roas":8.53,"cvr":0.0148,"actualMargin":0.53,"newCust":455,"retCust":889},"2026-01-24":{"net":141809.66,"returns":13614.16,"sessions":83158,"orders":947,"spend":21628.42,"roas":6.56,"cvr":0.0114,"actualMargin":0.599,"newCust":369,"retCust":554},"2026-01-25":{"net":178416.76,"returns":3995.73,"sessions":89337,"orders":1106,"spend":24673.08,"roas":7.23,"cvr":0.0124,"actualMargin":0.591,"newCust":481,"retCust":605},"2026-01-26":{"net":52893.35,"returns":9243.59,"sessions":56347,"orders":523,"spend":10539.2,"roas":5.02,"cvr":0.0093,"actualMargin":0.6,"newCust":206,"retCust":303},"2026-01-27":{"net":53736.46,"returns":10387.78,"sessions":53901,"orders":544,"spend":10776.69,"roas":4.99,"cvr":0.0101,"actualMargin":0.605,"newCust":230,"retCust":298},"2026-01-28":{"net":53790.6,"returns":11119.65,"sessions":48836,"orders":524,"spend":9867.92,"roas":5.45,"cvr":0.0107,"actualMargin":0.579,"newCust":214,"retCust":296},"2026-01-29":{"net":64552.96,"returns":14540.69,"sessions":49997,"orders":615,"spend":10777.52,"roas":5.99,"cvr":0.0123,"actualMargin":0.599,"newCust":243,"retCust":351},"2026-01-30":{"net":129198.23,"returns":12912.17,"sessions":72053,"orders":1108,"spend":14794.36,"roas":8.73,"cvr":0.0154,"actualMargin":0.554,"newCust":403,"retCust":665},"2026-01-31":{"net":129572.48,"returns":6510.65,"sessions":74072,"orders":1092,"spend":15736.72,"roas":8.23,"cvr":0.0147,"actualMargin":0.556,"newCust":430,"retCust":639},"2026-02-01":{"net":150373.62,"returns":4334.98,"sessions":83699,"orders":1215,"spend":16577.97,"roas":9.07,"cvr":0.0145,"actualMargin":0.565,"newCust":468,"retCust":706},"2026-02-02":{"net":71587.2,"returns":15986.04,"sessions":63290,"orders":732,"spend":12303.81,"roas":5.82,"cvr":0.0116,"actualMargin":0.6,"newCust":270,"retCust":441},"2026-02-03":{"net":56335.81,"returns":16328.29,"sessions":56437,"orders":554,"spend":12050.77,"roas":4.67,"cvr":0.0098,"actualMargin":0.621,"newCust":245,"retCust":295},"2026-02-04":{"net":64702.01,"returns":10333.84,"sessions":58536,"orders":595,"spend":12435.01,"roas":5.2,"cvr":0.0102,"actualMargin":0.628,"newCust":277,"retCust":310},"2026-02-05":{"net":67630.8,"returns":10281.32,"sessions":51513,"orders":627,"spend":12190.63,"roas":5.55,"cvr":0.0122,"actualMargin":0.62,"newCust":275,"retCust":335},"2026-02-06":{"net":151373.59,"returns":10847.07,"sessions":88980,"orders":1315,"spend":19299.41,"roas":7.84,"cvr":0.0148,"actualMargin":0.571,"newCust":478,"retCust":801},"2026-02-07":{"net":146838.84,"returns":8630.07,"sessions":89397,"orders":1241,"spend":20761.64,"roas":7.07,"cvr":0.0139,"actualMargin":0.56,"newCust":568,"retCust":653},"2026-02-08":{"net":163277.1,"returns":4560.36,"sessions":89528,"orders":1285,"spend":21810.49,"roas":7.49,"cvr":0.0144,"actualMargin":0.556,"newCust":586,"retCust":659},"2026-02-09":{"net":47757.04,"returns":18777.74,"sessions":68041,"orders":505,"spend":12627.37,"roas":3.78,"cvr":0.0074,"actualMargin":0.632,"newCust":219,"retCust":277},"2026-02-10":{"net":72446.9,"returns":13905.95,"sessions":61418,"orders":604,"spend":12539.98,"roas":5.78,"cvr":0.0098,"actualMargin":0.616,"newCust":264,"retCust":331},"2026-02-11":{"net":62033.5,"returns":15589.19,"sessions":55833,"orders":559,"spend":11442.2,"roas":5.42,"cvr":0.01,"actualMargin":0.625,"newCust":226,"retCust":323},"2026-02-12":{"net":175726.23,"returns":16137.78,"sessions":73284,"orders":1326,"spend":17751.25,"roas":9.9,"cvr":0.0181,"actualMargin":0.573,"newCust":465,"retCust":818},"2026-02-13":{"net":351092.01,"returns":15774.34,"sessions":125919,"orders":2649,"spend":48414.75,"roas":7.25,"cvr":0.021,"actualMargin":0.554,"newCust":992,"retCust":1609},"2026-02-14":{"net":353548.22,"returns":12904.07,"sessions":151726,"orders":2593,"spend":55435.68,"roas":6.38,"cvr":0.0171,"actualMargin":0.554,"newCust":1151,"retCust":1392},"2026-02-15":{"net":346456.55,"returns":4071.42,"sessions":137292,"orders":2457,"spend":46599.38,"roas":7.43,"cvr":0.0179,"actualMargin":0.554,"newCust":1063,"retCust":1372},"2026-02-16":{"net":348533.01,"returns":11574.59,"sessions":128957,"orders":2578,"spend":40820.59,"roas":8.54,"cvr":0.02,"actualMargin":0.554,"newCust":979,"retCust":1568},"2026-02-17":{"net":44717.1,"returns":20478.65,"sessions":69613,"orders":456,"spend":11912.29,"roas":3.75,"cvr":0.0066,"actualMargin":0.629,"newCust":160,"retCust":281},"2026-02-18":{"net":39980.73,"returns":21725.68,"sessions":60880,"orders":434,"spend":10816.41,"roas":3.7,"cvr":0.0071,"actualMargin":0.654,"newCust":155,"retCust":261},"2026-02-19":{"net":70443.41,"returns":17289.09,"sessions":66634,"orders":617,"spend":11105.37,"roas":6.34,"cvr":0.0093,"actualMargin":0.629,"newCust":244,"retCust":356},"2026-02-20":{"net":276983.67,"returns":22166.62,"sessions":139706,"orders":2242,"spend":28518.8,"roas":9.71,"cvr":0.016,"actualMargin":0.492,"newCust":739,"retCust":1430},"2026-02-21":{"net":203792.23,"returns":12960.6,"sessions":104274,"orders":1591,"spend":22616.48,"roas":9.01,"cvr":0.0153,"actualMargin":0.497,"newCust":581,"retCust":960},"2026-02-22":{"net":263388.52,"returns":5910.66,"sessions":127701,"orders":2022,"spend":28773.04,"roas":9.15,"cvr":0.0158,"actualMargin":0.501,"newCust":750,"retCust":1232},"2026-02-23":{"net":83971.79,"returns":27342.84,"sessions":88813,"orders":808,"spend":16546.63,"roas":5.07,"cvr":0.0091,"actualMargin":0.611,"newCust":372,"retCust":415},"2026-02-24":{"net":74148.81,"returns":25103.2,"sessions":71919,"orders":673,"spend":12366.53,"roas":6.0,"cvr":0.0094,"actualMargin":0.628,"newCust":279,"retCust":379},"2026-02-25":{"net":80312.33,"returns":25051.24,"sessions":73185,"orders":748,"spend":15122.01,"roas":5.31,"cvr":0.0102,"actualMargin":0.635,"newCust":327,"retCust":399},"2026-02-26":{"net":97799.84,"returns":24983.64,"sessions":77904,"orders":869,"spend":16763.54,"roas":5.83,"cvr":0.0112,"actualMargin":0.647,"newCust":358,"retCust":490},"2026-02-27":{"net":153576.6,"returns":26511.42,"sessions":106039,"orders":1363,"spend":23205.03,"roas":6.62,"cvr":0.0129,"actualMargin":0.63,"newCust":564,"retCust":769},"2026-02-28":{"net":150903.58,"returns":15706.77,"sessions":87646,"orders":1154,"spend":19454.72,"roas":7.76,"cvr":0.0132,"actualMargin":0.624,"newCust":532,"retCust":598},"2026-03-01":{"net":165032.2,"returns":8048.1,"sessions":88258,"orders":1267,"spend":18240.33,"roas":9.05,"cvr":0.0144,"actualMargin":0.609,"newCust":521,"retCust":725},"2026-03-02":{"net":84784.52,"returns":26065.6,"sessions":76905,"orders":911,"spend":15999.68,"roas":5.3,"cvr":0.0118,"actualMargin":0.61,"newCust":372,"retCust":521},"2026-03-03":{"net":76534.67,"returns":35387.56,"sessions":74150,"orders":841,"spend":13697.34,"roas":5.59,"cvr":0.0113,"actualMargin":0.639,"newCust":348,"retCust":470},"2026-03-04":{"net":96027.55,"returns":22867.95,"sessions":67749,"orders":866,"spend":15117.91,"roas":6.35,"cvr":0.0128,"actualMargin":0.618,"newCust":395,"retCust":450},"2026-03-05":{"net":114116.35,"returns":24460.17,"sessions":75859,"orders":1006,"spend":15475.66,"roas":7.37,"cvr":0.0133,"actualMargin":0.601,"newCust":407,"retCust":575},"2026-03-06":{"net":150956.49,"returns":24700.41,"sessions":97264,"orders":1276,"spend":20882.06,"roas":7.23,"cvr":0.0131,"actualMargin":0.613,"newCust":512,"retCust":733},"2026-03-07":{"net":141005.93,"returns":17989.1,"sessions":97484,"orders":1179,"spend":20435.07,"roas":6.9,"cvr":0.0121,"actualMargin":0.604,"newCust":500,"retCust":655},"2026-03-08":{"net":185474.41,"returns":7737.1,"sessions":101580,"orders":1400,"spend":23948.96,"roas":7.74,"cvr":0.0138,"actualMargin":0.59,"newCust":600,"retCust":762},"2026-03-09":{"net":123766.88,"returns":20631.43,"sessions":101239,"orders":1109,"spend":19759.67,"roas":6.18,"cvr":0.0109,"actualMargin":0.6,"newCust":435,"retCust":659},"2026-03-10":{"net":96651.58,"returns":26658.19,"sessions":84331,"orders":903,"spend":19749.57,"roas":4.89,"cvr":0.0107,"actualMargin":0.612,"newCust":378,"retCust":511},"2026-03-11":{"net":113123.7,"returns":22247.89,"sessions":78117,"orders":916,"spend":19175.87,"roas":5.9,"cvr":0.0117,"actualMargin":0.623,"newCust":458,"retCust":444},"2026-03-12":{"net":124514.0,"returns":16257.57,"sessions":85204,"orders":1039,"spend":19731.84,"roas":6.31,"cvr":0.0122,"actualMargin":0.607,"newCust":432,"retCust":579},"2026-03-13":{"net":255365.87,"returns":23790.62,"sessions":137743,"orders":2137,"spend":29928.86,"roas":8.53,"cvr":0.0155,"actualMargin":0.549,"newCust":865,"retCust":1197},"2026-03-14":{"net":252741.21,"returns":13011.5,"sessions":131477,"orders":2005,"spend":30183.18,"roas":8.36,"cvr":0.0152,"actualMargin":0.555,"newCust":746,"retCust":1193},"2026-03-15":{"net":252686.4,"returns":8647.84,"sessions":131044,"orders":1945,"spend":28619.41,"roas":8.83,"cvr":0.0148,"actualMargin":0.571,"newCust":757,"retCust":1139},"2026-03-16":{"net":113315.36,"returns":28385.02,"sessions":102082,"orders":1061,"spend":19216.89,"roas":5.9,"cvr":0.0104,"actualMargin":0.622,"newCust":431,"retCust":606},"2026-03-17":{"net":105474.11,"returns":28232.81,"sessions":84146,"orders":965,"spend":18016.89,"roas":5.85,"cvr":0.0115,"actualMargin":0.626,"newCust":373,"retCust":566},"2026-03-18":{"net":117891.76,"returns":20491.1,"sessions":94145,"orders":1010,"spend":18437.16,"roas":6.39,"cvr":0.0107,"actualMargin":0.611,"newCust":414,"retCust":581},"2026-03-19":{"net":136749.84,"returns":21402.41,"sessions":98676,"orders":1175,"spend":21649.36,"roas":6.32,"cvr":0.0119,"actualMargin":0.611,"newCust":465,"retCust":688},"2026-03-20":{"net":198593.6,"returns":23226.3,"sessions":129017,"orders":1643,"spend":31767.67,"roas":6.25,"cvr":0.0127,"actualMargin":0.607,"newCust":710,"retCust":909},"2026-03-21":{"net":183203.98,"returns":14672.74,"sessions":125358,"orders":1452,"spend":26565.51,"roas":6.9,"cvr":0.0116,"actualMargin":0.6,"newCust":765,"retCust":669},"2026-03-22":{"net":219022.64,"returns":9676.98,"sessions":139513,"orders":1676,"spend":33227.87,"roas":6.59,"cvr":0.012,"actualMargin":0.588,"newCust":819,"retCust":825},"2026-03-23":{"net":102095.03,"returns":33538.02,"sessions":108653,"orders":1093,"spend":16998.76,"roas":6.01,"cvr":0.0101,"actualMargin":0.612,"newCust":444,"retCust":634},"2026-03-24":{"net":98185.22,"returns":31243.05,"sessions":82433,"orders":899,"spend":15465.81,"roas":6.35,"cvr":0.0109,"actualMargin":0.616,"newCust":399,"retCust":484},"2026-03-25":{"net":102012.17,"returns":23027.29,"sessions":79090,"orders":900,"spend":14355.1,"roas":7.11,"cvr":0.0114,"actualMargin":0.618,"newCust":373,"retCust":509},"2026-03-26":{"net":102650.99,"returns":22522.74,"sessions":87240,"orders":911,"spend":15542.38,"roas":6.6,"cvr":0.0104,"actualMargin":0.615,"newCust":395,"retCust":502},"2026-03-27":{"net":157867.85,"returns":28409.61,"sessions":157331,"orders":1367,"spend":28062.99,"roas":5.63,"cvr":0.0087,"actualMargin":0.622,"newCust":603,"retCust":749},"2026-03-28":{"net":180665.21,"returns":15848.03,"sessions":195826,"orders":1432,"spend":27114.69,"roas":6.66,"cvr":0.0073,"actualMargin":0.622,"newCust":730,"retCust":684},"2026-03-29":{"net":195074.06,"returns":9219.9,"sessions":122559,"orders":1384,"spend":29196.93,"roas":6.68,"cvr":0.0113,"actualMargin":0.623,"newCust":723,"retCust":644},"2026-03-30":{"net":123839.81,"returns":30396.31,"sessions":103214,"orders":1099,"spend":23300.43,"roas":5.31,"cvr":0.0106,"actualMargin":0.622,"newCust":485,"retCust":589},"2026-03-31":{"net":121721.64,"returns":29263.8,"sessions":96004,"orders":1045,"spend":22057.22,"roas":5.52,"cvr":0.0109,"actualMargin":0.632,"newCust":513,"retCust":513}},ug:{"2026-03-26":60000,"2026-03-27":148000,"2026-03-28":138000,"2026-03-29":158000,"2026-03-30":70000,"2026-03-31":60000,"2026-04-19":160000,"2026-04-20":90000,"2026-04-21":85000,"2026-04-24":150000,"2026-04-26":160000,"2026-04-27":90000,"2026-04-28":85000,"2026-05-01":200523,"2026-05-02":115993,"2026-05-03":144632},lp:{"2026-04-01":{"net":73034,"sess":63809},"2026-04-02":{"net":85548,"sess":67934},"2026-04-03":{"net":138125,"sess":96138},"2026-04-04":{"net":139133,"sess":100307},"2026-04-05":{"net":238255,"sess":114185},"2026-04-06":{"net":72602,"sess":70657},"2026-04-07":{"net":68493,"sess":64692},"2026-04-08":{"net":73034,"sess":63809},"2026-04-09":{"net":85548,"sess":67934},"2026-04-10":{"net":146582,"sess":100062},"2026-04-11":{"net":132034,"sess":95189},"2026-04-12":{"net":361491,"sess":149139},"2026-04-13":{"net":72602,"sess":70657},"2026-04-14":{"net":68493,"sess":64692},"2026-04-15":{"net":73034,"sess":63809},"2026-04-16":{"net":85548,"sess":67934},"2026-04-17":{"net":138125,"sess":96138},"2026-04-18":{"net":139133,"sess":100307},"2026-04-19":{"net":164314,"sess":93212},"2026-04-20":{"net":72602,"sess":70657},"2026-04-21":{"net":68493,"sess":64692},"2026-04-22":{"net":73034,"sess":63809},"2026-04-23":{"net":85548,"sess":67934},"2026-04-24":{"net":138125,"sess":96138},"2026-04-25":{"net":139133,"sess":100307},"2026-04-26":{"net":164314,"sess":93212},"2026-04-27":{"net":72602,"sess":70657},"2026-04-28":{"net":68493,"sess":64692},"2026-04-29":{"net":73034,"sess":63809},"2026-04-30":{"net":85548,"sess":67934}}};
+  if(!localStorage.getItem('tbn26_ev')){
+    Object.entries(saved).forEach(([k,v])=>localStorage.setItem('tbn26_'+k,JSON.stringify(v)));
+  }
+})();
+
+// ── Import actuals ───────────────────────────────────────────────────────────
+const TEMPLATE_COLS=['Date','Net Rev $','Returns $','Sessions','Orders','Ad Spend $','Actual Margin %','New Customers','Returning Customers'];
+
+function downloadTemplate(){
+  const rows=[TEMPLATE_COLS];
+  DAYS.forEach(function(day){
+    var a=userAct[day.iso]||{};
+    var net=a.net!=null?Math.round(a.net):'';
+    var ret=a.returns!=null?Math.round(a.returns):'';
+    var sess=a.sessions!=null?Math.round(a.sessions):'';
+    var ord=a.orders!=null?a.orders:'';
+    var spend=a.spend!=null?Math.round(a.spend):'';
+    var margin=a.actualMargin!=null?(a.actualMargin>1?a.actualMargin.toFixed(1):(a.actualMargin*100).toFixed(1)):'';
+    var newC=a.newCust!=null?a.newCust:'';
+    var retC=a.retCust!=null?a.retCust:'';
+    rows.push([day.iso,net,ret,sess,ord,spend,margin,newC,retC]);
+  });
+  var csv=rows.map(function(r){return r.join(',');}).join('\n');
+  var blob=new Blob([csv],{type:'text/csv'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download='tbn_actuals_template_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();URL.revokeObjectURL(url);
+  setImportStatus('Template downloaded — fill in blank rows and upload or paste back','#185FA5');
+}
+
+function togglePasteZone(){
+  var z=document.getElementById('paste-zone');
+  z.style.display=(z.style.display==='none'?'block':'none');
+  if(z.style.display==='block') setTimeout(function(){document.getElementById('paste-area').focus();},80);
+}
+
+function setImportStatus(msg,color){
+  var el=document.getElementById('import-status');
+  if(el){el.textContent=msg;el.style.color=color||'var(--forest)';}
+}
+
+function parseImportDate(raw){
+  if(!raw) return null;
+  raw=String(raw).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  var m1=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m1) return m1[3]+'-'+m1[1].padStart(2,'0')+'-'+m1[2].padStart(2,'0');
+  var m2=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+  if(m2) return '20'+m2[3]+'-'+m2[1].padStart(2,'0')+'-'+m2[2].padStart(2,'0');
+  var serial=parseFloat(raw);
+  if(!isNaN(serial)&&serial>40000&&serial<60000){
+    var ms=(serial-25569)*86400000;
+    var d=new Date(Math.round(ms));
+    return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');
+  }
+  return null;
+}
+
+function cleanNum(v){
+  if(v==null||String(v).trim()==='') return null;
+  var n=parseFloat(String(v).replace(/[$,%\s]/g,'').replace(/,/g,''));
+  return isNaN(n)?null:n;
+}
+
+var HDR={
+  'date':'date','day':'date',
+  'net rev $':'net','net rev':'net','net sales':'net','net revenue':'net','net':'net',
+  'returns $':'returns','returns':'returns',
+  'sessions':'sessions','total site sessions':'sessions',
+  'orders':'orders',
+  'ad spend $':'spend','ad spend':'spend','total spend':'spend','spend':'spend',
+  'actual margin %':'actualMargin','margin %':'actualMargin','gross margin':'actualMargin','margin':'actualMargin',
+  'new customers':'newCust','new cust':'newCust',
+  'returning customers':'retCust','ret cust':'retCust',
+  'cvr':'cvr','site conversion rate':'cvr',
+  'roas':'roas'
+};
+
+function applyRows(headers,rows){
+  var hKeys=headers.map(function(h){return HDR[String(h).toLowerCase().trim()]||null;});
+  var imported=0,skipped=0;
+  rows.forEach(function(row){
+    if(row.every(function(v){return v==null||String(v).trim()=='';})) return;
+    var dateIdx=hKeys.indexOf('date');
+    if(dateIdx===-1){skipped++;return;}
+    var iso=parseImportDate(row[dateIdx]);
+    if(!iso||!iso.startsWith('2026')){skipped++;return;}
+    if(!userAct[iso]) userAct[iso]={};
+    var ua=userAct[iso];
+    var changed=false;
+    hKeys.forEach(function(key,i){
+      if(!key||key==='date') return;
+      var raw=row[i];
+      if(raw==null||String(raw).trim()==='') return;
+      var n=cleanNum(raw);
+      if(n==null) return;
+      if(key==='actualMargin'&&n>1) n=n/100;
+      if(key==='cvr'&&n>1) n=n/100;
+      if(key==='sessions'||key==='orders'||key==='newCust'||key==='retCust') n=Math.round(n);
+      if(key==='returns') n=Math.abs(n);
+      ua[key]=n;changed=true;
+    });
+    if(changed) imported++;
+  });
+  lsSet('ua',userAct);
+  return {imported:imported,skipped:skipped};
+}
+
+function processTextData(text){
+  if(!text||!text.trim()){setImportStatus('Nothing to import','var(--rose)');return;}
+  var lines=text.trim().split('\n').map(function(l){return l.replace(/\r$/,'');}).filter(function(l){return l.trim();});
+  if(lines.length<2){setImportStatus('Need a header row + at least 1 data row','var(--rose)');return;}
+  var sep=lines[0].indexOf('\t')>=0?'\t':',';
+  function parseLine(line){
+    if(sep==='\t') return line.split('\t').map(function(v){return v.trim();});
+    var r=[],cur='',q=false;
+    for(var i=0;i<line.length;i++){
+      if(line[i]==='"'){q=!q;}
+      else if(line[i]===','&&!q){r.push(cur.trim());cur='';}
+      else cur+=line[i];
+    }
+    r.push(cur.trim());return r;
+  }
+  var headers=parseLine(lines[0]);
+  var rows=lines.slice(1).map(parseLine);
+  var result=applyRows(headers,rows);
+  recalcBaseline();buildPlanner();buildActualsTab(actFilterMon);buildOverview();updateAnnual();if(_chartsBuilt)_updateCharts();
+  setImportStatus('Imported '+result.imported+' day'+(result.imported!==1?'s':'')+(result.skipped?' · '+result.skipped+' skipped':''),'var(--forest)');
+}
+
+function processPaste(){
+  var text=document.getElementById('paste-area').value;
+  processTextData(text);
+  togglePasteZone();
+  document.getElementById('paste-area').value='';
+}
+
+function handleFileImport(input){
+  var file=input.files[0];
+  if(!file) return;
+  setImportStatus('Reading...','var(--bark)');
+  var ext=file.name.split('.').pop().toLowerCase();
+  if(ext==='csv'){
+    var reader=new FileReader();
+    reader.onload=function(e){processTextData(e.target.result);};
+    reader.readAsText(file);
+  } else if(ext==='xlsx'||ext==='xls'){
+    if(window.XLSX){readXLSX(file);}
+    else{
+      var s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload=function(){readXLSX(file);};
+      s.onerror=function(){setImportStatus('Could not load XLSX library — try CSV','var(--rose)');};
+      document.head.appendChild(s);
+    }
+  }
+  input.value='';
+}
+
+function readXLSX(file){
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
+    var ws=wb.Sheets[wb.SheetNames[0]];
+    var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,dateNF:'yyyy-mm-dd'});
+    if(rows.length<2){setImportStatus('Sheet appears empty','var(--rose)');return;}
+    var result=applyRows(rows[0],rows.slice(1));
+    recalcBaseline();buildPlanner();buildActualsTab(actFilterMon);buildOverview();updateAnnual();if(_chartsBuilt)_updateCharts();
+    setImportStatus('Imported '+result.imported+' day'+(result.imported!==1?'s':'')+(result.skipped?' · '+result.skipped+' skipped':''),'var(--forest)');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── Lift recalibration from actuals ─────────────────────────────────────────
+let computedLifts={}; // stores computed lifts from actuals {evName: {lift, margin, cvr, n, days}}
+
+function computeLiftsFromActuals(){
+  const byEvent={};
+  DAYS.forEach(function(day){
+    const ua=userAct[day.iso];
+    if(!ua||ua.net==null||ua.net<5000) return;
+    const evName=getEv(day.iso);
+    if(evName==='None') return; // skip BAU days
+    const bauNet=DOW_BASE[day.dow]&&DOW_BASE[day.dow].net;
+    if(!bauNet) return;
+    const lift=ua.net/bauNet;
+    if(lift<0.5||lift>10) return; // sanity check
+    if(!byEvent[evName]) byEvent[evName]={lifts:[],margins:[],cvrs:[],days:[]};
+    byEvent[evName].lifts.push(lift);
+    byEvent[evName].days.push(day.iso);
+    if(ua.actualMargin&&ua.actualMargin>0.3&&ua.actualMargin<0.9)
+      byEvent[evName].margins.push(ua.actualMargin);
+    if(ua.orders&&ua.sessions&&ua.sessions>0)
+      byEvent[evName].cvrs.push(ua.orders/ua.sessions);
+  });
+  const avg=function(arr){return arr.length?arr.reduce(function(s,v){return s+v;},0)/arr.length:null;};
+  const result={};
+  Object.keys(byEvent).forEach(function(ev){
+    const d=byEvent[ev];
+    if(d.lifts.length<2) return; // need 2+ days
+    result[ev]={
+      lift:Math.round(avg(d.lifts)*100)/100,
+      margin:d.margins.length>=2?Math.round(avg(d.margins)*1000)/1000:null,
+      cvr:d.cvrs.length>=2?Math.round(avg(d.cvrs)*10000)/10000:null,
+      n:d.lifts.length,
+      days:d.days,
+      current:LIFT[ev]?LIFT[ev].lift:null
+    };
+  });
+  return result;
+}
+
+function showRecalibrate(){
+  const panel=document.getElementById('recalib-panel');
+  panel.style.display=panel.style.display==='none'?'block':'none';
+  if(panel.style.display==='none') return;
+  computedLifts=computeLiftsFromActuals();
+  const container=document.getElementById('recalib-table');
+  if(!Object.keys(computedLifts).length){
+    container.innerHTML='<div style="font-size:11px;color:var(--bark);padding:.5rem 0">Not enough actuals yet — need 2+ days per event type. Enter more actuals and try again.</div>';
+    return;
+  }
+  var html='<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  html+='<thead><tr style="border-bottom:1px solid var(--bd)">';
+  html+='<th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--bark);text-transform:uppercase;letter-spacing:.05em">Apply</th>';
+  html+='<th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--bark);text-transform:uppercase;letter-spacing:.05em">Event Type</th>';
+  html+='<th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--bark);text-transform:uppercase;letter-spacing:.05em">Current Lift</th>';
+  html+='<th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--bark);text-transform:uppercase;letter-spacing:.05em">Your Actual Lift</th>';
+  html+='<th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--bark);text-transform:uppercase;letter-spacing:.05em">Delta</th>';
+  html+='<th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--bark);text-transform:uppercase;letter-spacing:.05em">Act Margin</th>';
+  html+='<th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--bark);text-transform:uppercase;letter-spacing:.05em">Based on</th>';
+  html+='</tr></thead><tbody>';
+  Object.keys(computedLifts).sort().forEach(function(ev){
+    var d=computedLifts[ev];
+    var delta=d.current!=null?d.lift-d.current:null;
+    var deltaColor=delta==null?'inherit':delta>0.1?'var(--forest)':delta<-0.1?'var(--rose)':'var(--bark)';
+    var deltaStr=delta!=null?(delta>=0?'+':'')+delta.toFixed(2)+'x':'—';
+    var higher=delta!=null&&delta>0.05;
+    var lower=delta!=null&&delta<-0.05;
+    html+='<tr style="border-bottom:1px solid var(--bd)">';
+    html+='<td style="padding:6px 8px"><input type="checkbox" class="lift-check" data-ev="'+ev+'" checked /></td>';
+    html+='<td style="padding:6px 8px;font-weight:500">'+ev+'</td>';
+    html+='<td style="padding:6px 8px;text-align:right;color:var(--bark)">'+(d.current!=null?d.current.toFixed(2)+'x':'—')+'</td>';
+    html+='<td style="padding:6px 8px;text-align:right;font-weight:500">'+d.lift.toFixed(2)+'x</td>';
+    html+='<td style="padding:6px 8px;text-align:right;color:'+deltaColor+';font-weight:500">'+deltaStr+'</td>';
+    html+='<td style="padding:6px 8px;text-align:right;color:var(--bark)">'+(d.margin!=null?(d.margin*100).toFixed(1)+'%':'—')+'</td>';
+    html+='<td style="padding:6px 8px;color:var(--bark)">'+d.n+' day'+(d.n!==1?'s':'')+' ('+d.days.map(function(d){return d.slice(5).replace('-','/');}).join(', ')+')</td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table>';
+  container.innerHTML=html;
+}
+
+function applySelectedLifts(){
+  var checks=document.querySelectorAll('.lift-check:checked');
+  var applied=0;
+  checks.forEach(function(cb){
+    var ev=cb.dataset.ev;
+    if(computedLifts[ev]&&LIFT[ev]){
+      LIFT[ev].lift=computedLifts[ev].lift;
+      if(computedLifts[ev].margin!=null) LIFT[ev].margin=computedLifts[ev].margin;
+      if(computedLifts[ev].cvr!=null) LIFT[ev].cvr=computedLifts[ev].cvr;
+      applied++;
+    }
+  });
+  // Clear unlocked future projections so they recompute
+  Object.keys(lockedProj).forEach(function(iso){
+    if(userAct[iso]&&userAct[iso].net!=null) return; // has actual, skip
+    delete lockedProj[iso];
+  });
+  lsSet('lp',lockedProj);
+  buildPlanner();buildBenchmarks();buildOverview();updateAnnual();if(_chartsBuilt)_updateCharts();
+  document.getElementById('lift-status').textContent='Updated '+applied+' event type'+(applied!==1?'s':'')+' from actuals';
+  document.getElementById('recalib-panel').style.display='none';
+}
+
+function applyAllLifts(){
+  document.querySelectorAll('.lift-check').forEach(function(cb){cb.checked=true;});
+  applySelectedLifts();
+}
+
+function resetLifts(){
+  if(!confirm('Reset all lift factors back to original benchmarks?')) return;
+  Object.keys(DEFAULT_LIFT).forEach(function(ev){
+    LIFT[ev]=JSON.parse(JSON.stringify(DEFAULT_LIFT[ev]));
+  });
+  Object.keys(lockedProj).forEach(function(iso){
+    if(userAct[iso]&&userAct[iso].net!=null) return;
+    delete lockedProj[iso];
+  });
+  lsSet('lp',lockedProj);
+  buildPlanner();buildBenchmarks();buildOverview();updateAnnual();if(_chartsBuilt)_updateCharts();
+  document.getElementById('lift-status').textContent='Reset to original benchmarks';
+  document.getElementById('recalib-panel').style.display='none';
+}
+
+// ── Rolling baseline recalculation ──────────────────────────────────────────
+function recalcBaseline(){
+  try{
+  // Collect all days with actuals, sorted by date
+  const actualDays=[];
+  DAYS.forEach(function(day){
+    const ua=userAct[day.iso];
+    if(!ua||ua.net==null||ua.net<5000) return; // skip blank or near-zero
+    const evName=getEv(day.iso);
+    const isPromo=PROMO_EVENTS.has(evName);
+    actualDays.push({
+      iso:day.iso, dow:day.dow, net:ua.net,
+      sessions:ua.sessions||null,
+      cvr:(ua.orders&&ua.sessions)?ua.orders/ua.sessions:null,
+      margin:ua.actualMargin||null,
+      isPromo:isPromo
+    });
+  });
+
+  if(actualDays.length<14) return; // need enough data to be meaningful
+
+  // Take last 28 days of actuals
+  const last28=actualDays.slice(-28);
+  const bauDays=last28.filter(function(d){return !d.isPromo;});
+
+  if(bauDays.length<7) return; // need at least 7 BAU days across DOWs
+
+  // Compute DOW averages from BAU days only
+  const dowNet={},dowSess={},dowCvr={},dowMargin={};
+  const DOWS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  DOWS.forEach(function(dow){
+    dowNet[dow]=[];dowSess[dow]=[];dowCvr[dow]=[];dowMargin[dow]=[];
+  });
+
+  bauDays.forEach(function(d){
+    dowNet[d.dow].push(d.net);
+    if(d.sessions) dowSess[d.dow].push(d.sessions);
+    if(d.cvr&&d.cvr>0.003&&d.cvr<0.05) dowCvr[d.dow].push(d.cvr);
+    if(d.margin&&d.margin>0.4&&d.margin<0.8) dowMargin[d.dow].push(d.margin);
+  });
+
+  // Update globals — only update DOWs that have enough data (2+ days)
+  DOWS.forEach(function(dow){
+    if(dowNet[dow].length>=2){
+      const avg=function(arr){return arr.reduce(function(s,v){return s+v;},0)/arr.length;};
+      DOW_BASE[dow]={
+        net:Math.round(avg(dowNet[dow])),
+        sess:dowSess[dow].length>=2?Math.round(avg(dowSess[dow])):DOW_BASE[dow].sess
+      };
+      if(dowCvr[dow].length>=2) DOW_CVR[dow]=Math.round(avg(dowCvr[dow])*10000)/10000;
+      if(dowMargin[dow].length>=2) DOW_MARGIN[dow]=Math.round(avg(dowMargin[dow])*1000)/1000;
+    }
+  });
+
+  // Update baseline status display
+  var bauCount=bauDays.length;
+  var el=document.getElementById('baseline-status');
+  if(el){
+    var dates=bauDays.map(function(d){return d.iso;}).sort();
+    var from=dates[0]?dates[0].slice(5).replace('-','/'):'-';
+    var to=dates[dates.length-1]?dates[dates.length-1].slice(5).replace('-','/'):'-';
+    el.textContent='Baseline: '+bauCount+' BAU days ('+from+'–'+to+')';
+  }
+
+  // Clear unlocked projections so they recompute with new baseline
+  DAYS.forEach(function(day){
+    if(!userAct[day.iso]&&lockedProj[day.iso]===undefined){
+      // future unlocked day — will recompute automatically via getDayData
+    }
+  });
+  }catch(e){console.warn('recalcBaseline error:',e);}
+}
+
+// ── Manual projection locking ────────────────────────────────────────────────
+function promptNote(iso){
+  const cur=getNote(iso);
+  const dt=DAYS.find(d=>d.iso===iso);
+  const label=dt?dt.iso.slice(5).replace('-','/'):'';
+  const val=prompt(`Callout label for ${label} (leave blank to remove):`, cur);
+  if(val===null) return; // cancelled
+  setNote(iso,val);
+  buildPlanner();
+}
+
+function toggleLock(iso){
+  if(lockedProj[iso]){
+    // Unlock — projection will recompute freely
+    delete lockedProj[iso];
+  } else {
+    // Lock — snapshot current live projection
+    const day=DAYS.find(x=>x.iso===iso);
+    if(!day) return;
+    const ev=LIFT[getEv(iso)]||LIFT['None'];
+    const base=DOW_BASE[day.dow];
+    const lift=getLift(day.dow,getEv(iso));
+    const rawNet=Math.round(base.net*lift);
+    const sl=lift>1?1+(lift-1)*0.5:Math.max(lift,0.85);
+    const rawSess=Math.round(base.sess*sl);
+    lockedProj[iso]={net:rawNet,sess:rawSess};
+  }
+  lsSet('lp',lockedProj);
+  buildPlanner();buildOverview();updateAnnual();if(_chartsBuilt)_updateCharts();
+}
+function lockMonth(mon){
+  // Lock all future unlocked days in a month
+  DAYS.filter(d=>d.mon===mon&&!ACTUALS_2026[d.iso]).forEach(day=>{
+    if(!lockedProj[day.iso]){
+      const ev=LIFT[getEv(day.iso)]||LIFT['None'];
+      const base=DOW_BASE[day.dow];
+      const lift=getLift(day.dow,getEv(day.iso));
+      const rawNet=Math.round(base.net*lift);
+      const sl=lift>1?1+(lift-1)*0.5:Math.max(lift,0.85);
+      lockedProj[day.iso]={net:rawNet,sess:Math.round(base.sess*sl)};
+    }
+  });
+  lsSet('lp',lockedProj);
+  buildPlanner();buildOverview();updateAnnual();if(_chartsBuilt)_updateCharts();
+}
+function unlockMonth(mon){
+  DAYS.filter(d=>d.mon===mon).forEach(day=>{delete lockedProj[day.iso];});
+  lsSet('lp',lockedProj);
+  buildPlanner();buildOverview();updateAnnual();if(_chartsBuilt)_updateCharts();
+}
+
+// ── Export / Import ──────────────────────────────────────────────────────────
+// ── Build daily rows for export ──────────────────────────────────────────────
+function buildExportRows(){
+  const rows=[];
+  const headers=['Week','Date','DOW','Event Type','Note','Daily Goal','Projected Net','Actual Net',
+    'vs Goal $','vs Goal %','Proj Margin %','Act Margin %','ROAS','CVR',
+    'Sessions','Orders','Ad Spend','Est Returns','2025 Net','YOY $','YOY %'];
+  rows.push(headers);
+  DAYS.forEach(day=>{
+    const dd=getDayData(day.iso);if(!dd) return;
+    const wkMon=getWeekMonday(day.iso);
+    const wkSun=new Date(wkMon.getFullYear(),wkMon.getMonth(),wkMon.getDate()+6);
+    const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
+    const wkLabel=`W${day.wkNum} ${fmt(wkMon)}-${fmt(wkSun)}`;
+    const vsGoal=dd.net-dd.goal;
+    const vsGoalPct=dd.goal>0?vsGoal/dd.goal:0;
+    const yoyD=dd.yoy25!=null?dd.net-dd.yoy25:null;
+    const yoyPct=dd.yoy25&&dd.yoy25>0?yoyD/dd.yoy25:null;
+    rows.push([
+      wkLabel,
+      day.iso,
+      day.dow,
+      dd.evName,
+      getNote(day.iso)||day.special||'',
+      dd.goal,
+      dd.projNet,
+      dd.isAct?Math.round(dd.net):'',
+      vsGoal,
+      parseFloat((vsGoalPct*100).toFixed(1)),
+      parseFloat((dd.projMargin*100).toFixed(1)),
+      dd.actualMargin!=null?parseFloat((dd.actualMargin*100).toFixed(1)):'',
+      dd.roas!=null?parseFloat(dd.roas.toFixed(2)):'',
+      dd.cvr!=null?parseFloat((dd.cvr*100).toFixed(2)):'',
+      dd.sessions||'',
+      dd.orders||'',
+      dd.spend||'',
+      Math.round(dd.estReturns),
+      dd.yoy25!=null?Math.round(dd.yoy25):'',
+      yoyD!=null?Math.round(yoyD):'',
+      yoyPct!=null?parseFloat((yoyPct*100).toFixed(1)):'',
+    ]);
+  });
+  return rows;
+}
+
+async function getAIRecommendations(){
+  const modal=document.getElementById('ai-modal');
+  const body=document.getElementById('ai-modal-body');
+  const btn=document.getElementById('ai-rec-btn');
+  modal.style.display='block';
+  body.innerHTML='<div style="text-align:center;padding:2rem;color:var(--bark)"><div style="font-size:32px;margin-bottom:.5rem">&#10024;</div><div style="font-size:14px">Analyzing your full-year data...</div><div style="font-size:11px;margin-top:.5rem;opacity:.6">This takes about 10 seconds</div></div>';
+  btn.textContent='&#10024; Analyzing...';
+  btn.disabled=true;
+
+  const today=TODAY_ISO;
+
+  // Monthly summary
+  const monthlySummary=[];
+  for(let m=1;m<=12;m++){
+    const md=DAYS.filter(d=>d.mon===m);
+    const actNet=md.filter(d=>userAct[d.iso]&&userAct[d.iso].net).reduce((s,d)=>s+(userAct[d.iso].net||0),0);
+    const projNet=md.filter(d=>!userAct[d.iso]).reduce((s,d)=>{const dd=getDayData(d.iso);return s+(dd?dd.projNet:0);},0);
+    const goal=MONTH_GOALS[m];
+    const plannedEvents=[...new Set(md.filter(d=>PROMO_EVENTS.has(getEv(d.iso))).map(d=>getEv(d.iso)))];
+    monthlySummary.push({
+      month:MONTH_NAMES[m-1],
+      goal:Math.round(goal),
+      actuals:Math.round(actNet),
+      projected:Math.round(projNet),
+      total:Math.round(actNet+projNet),
+      gap:Math.round(goal-(actNet+projNet)),
+      plannedPromos:plannedEvents
+    });
+  }
+
+  const baselines={Mon:DOW_BASE.Mon,Tue:DOW_BASE.Tue,Wed:DOW_BASE.Wed,Thu:DOW_BASE.Thu,Fri:DOW_BASE.Fri,Sat:DOW_BASE.Sat,Sun:DOW_BASE.Sun};
+
+  const prompt=`You are a strategic ecommerce advisor for Three Bird Nest (TBN), a boho-chic women's fashion brand. Analyze their 2026 promo calendar and give specific event recommendations for the rest of the year.
+
+TODAY: ${today}
+ANNUAL GOAL: $45,995,925
+
+MONTHLY GOALS, ACTUALS & PROJECTIONS:
+${JSON.stringify(monthlySummary,null,2)}
+
+BAU DAILY BASELINES (rolling 28-day, promo days excluded):
+Mon: $${DOW_BASE.Mon.net.toLocaleString()}, Tue: $${DOW_BASE.Tue.net.toLocaleString()}, Wed: $${DOW_BASE.Wed.net.toLocaleString()}, Thu: $${DOW_BASE.Thu.net.toLocaleString()}, Fri: $${DOW_BASE.Fri.net.toLocaleString()}, Sat: $${DOW_BASE.Sat.net.toLocaleString()}, Sun: $${DOW_BASE.Sun.net.toLocaleString()}
+
+EVENT TYPE LIFTS:
+- OOTW + New Capsule: 1.10x (Mondays)
+- PPT: 2.20x (Private Pre-sale)
+- Early Access-Sitewide 40: 2.48x (EA before full sitewide)
+- Sitewide 40: 4.79x (40% off full site)
+- Boho Bliss: 3.01x (Curated collection)
+- Free Shipping: 1.77x
+- Sitewide 33: 2.80x (33% off full site)
+- Sale on Sale: 1.48x
+
+ALREADY PLANNED:
+- Memorial Day: EA 5/21, Sitewide 40 5/22-5/25
+- 4th of July: EA 7/2, Sitewide 40 7/3-7/5
+- Labor Day: EA 9/3, Sitewide 40 9/4-9/7
+- Black Friday/Cyber Monday: late November
+
+Please provide:
+1. Overall tracking assessment vs $45.9M annual goal
+2. For each month that has a gap, recommend specific event dates and types
+3. Flag any months where the goal looks aggressive given current trajectory
+4. Note any pacing concerns (too many promos back to back)
+
+Be concise and specific. Use markdown headers.`;
+
+  try{
+    const resp=await fetch('/.netlify/functions/claude',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1500,
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+    const data=await resp.json();
+    if(data.error){throw new Error(data.error.message);}
+    const text=(data.content&&data.content[0])?data.content[0].text:'No response.';
+    const html=text
+      .replace(/^### (.+)$/gm,'<h4 style="color:var(--esp);margin:1rem 0 .3rem;font-size:13px;font-weight:600">$1</h4>')
+      .replace(/^## (.+)$/gm,'<h3 style="color:var(--esp);margin:1.2rem 0 .4rem;font-family:\'Playfair Display\',serif;font-size:15px">$1</h3>')
+      .replace(/^# (.+)$/gm,'<h2 style="color:var(--esp);margin:1.2rem 0 .5rem;font-family:\'Playfair Display\',serif">$1</h2>')
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/^- (.+)$/gm,'<li style="margin:.25rem 0;font-size:13px">$1</li>')
+      .replace(/(<li[^>]*>.*<\/li>\n?)+/gs,'<ul style="padding-left:1.2rem;margin:.4rem 0">$&</ul>')
+      .replace(/\n\n/g,'<br><br>')
+      .replace(/\n/g,'<br>');
+    body.innerHTML='<div style="font-size:13px;line-height:1.7;color:var(--char)">'+html+'</div>'
+      +'<div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--bd);display:flex;gap:8px">'
+      +'<button onclick="document.getElementById(\'ai-modal\').style.display=\'none\'" style="font-size:11px;padding:5px 14px;border:1px solid var(--bdm);border-radius:4px;background:#fff;color:var(--char);cursor:pointer;font-family:\'DM Sans\',sans-serif">Close</button>'
+      +'<button onclick="getAIRecommendations()" style="font-size:11px;padding:5px 14px;border:1px solid var(--esp);border-radius:4px;background:var(--esp);color:#fff;cursor:pointer;font-family:\'DM Sans\',sans-serif">&#10227; Refresh</button>'
+      +'</div>';
+  }catch(e){
+    body.innerHTML='<div style="padding:1rem">'
+      +'<div style="color:var(--rose);font-weight:500;margin-bottom:.5rem">Could not connect to AI</div>'
+      +'<div style="font-size:12px;color:var(--bark)">'+e.message+'</div>'
+      +'<div style="font-size:11px;color:var(--bark);margin-top:.75rem">This feature requires the Claude API to be accessible from your browser. If you\'re seeing a CORS error, the API call needs to go through a proxy server. Please let us know and we can set that up.</div>'
+      +'</div>';
+  }
+  btn.textContent='&#10024; AI Recommendations';
+  btn.disabled=false;
+}
+
+
+function exportCSV(){
+  const rows=buildExportRows();
+  const csv=rows.map(row=>row.map(v=>{
+    const s=String(v==null?'':v);
+    return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`  :s;
+  }).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='tbn_planner_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();URL.revokeObjectURL(url);
+}
+
+function exportXLSX(){
+  const rows=buildExportRows();
+  // Build XLSX using SheetJS (loaded from CDN)
+  const script=document.createElement('script');
+  script.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  script.onload=()=>{
+    const wb=XLSX.utils.book_new();
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    // Column widths
+    ws['!cols']=[
+      {wch:14},{wch:11},{wch:5},{wch:28},{wch:12},{wch:13},{wch:12},
+      {wch:11},{wch:10},{wch:13},{wch:13},{wch:7},{wch:7},
+      {wch:10},{wch:8},{wch:10},{wch:12},{wch:12},{wch:10},{wch:9}
+    ];
+    // Style header row bold + frozen
+    ws['!freeze']={xSplit:0,ySplit:1};
+    // Format number columns
+    const numFmt='#,##0';
+    const pctFmt='0.0%';
+    const dollarFmt='$#,##0';
+    const range=XLSX.utils.decode_range(ws['!ref']);
+    // Apply dollar format to money cols: Goal(E), Proj(F), Actual(G), vsGoal(H), Sessions(N), Orders(O), Spend(P), EstRet(Q), 2025(R), YOY$(S)
+    const dollarCols=[4,5,6,7,13,14,15,16,17,18];
+    // Apply % format to vsGoal%(I), ProjMargin(J), ActMargin(K), CVR(M), YOY%(T)
+    const pctCols=[8,9,10,12,19];
+    for(let r=1;r<=range.e.r;r++){
+      dollarCols.forEach(c=>{
+        const cell=ws[XLSX.utils.encode_cell({r,c})];
+        if(cell&&typeof cell.v==='number') cell.z=dollarFmt;
+      });
+      pctCols.forEach(c=>{
+        const cell=ws[XLSX.utils.encode_cell({r,c})];
+        if(cell&&typeof cell.v==='number') cell.z='0.0"%"';
+      });
+    }
+    XLSX.utils.book_append_sheet(wb,ws,'2026 Daily Planner');
+
+    // Second sheet: monthly summary
+    const monthRows=[['Month','2026 Goal','Projected Net','2025 Actual','YOY $','YOY %','vs Goal $','vs Goal %','Proj Margin %','Actual Days']];
+    for(let m=1;m<=12;m++){
+      const md=DAYS.filter(d=>d.mon===m);
+      const mNet=md.reduce((s,d)=>{const dd=getDayData(d.iso);return s+(dd?dd.net:0);},0);
+      const mGoal=MONTH_GOALS[m];
+      const m25=MONTHLY_2025[String(m)]?.net||0;
+      const actDays=md.filter(d=>getDayData(d.iso)?.isAct).length;
+      const avgMargin=md.reduce((s,d)=>{const dd=getDayData(d.iso);return s+(dd?dd.projMargin:0);},0)/md.length;
+      const vsG=mNet-mGoal; const yoyD=mNet-m25;
+      monthRows.push([
+        MONTH_NAMES[m-1],Math.round(mGoal),Math.round(mNet),Math.round(m25),
+        Math.round(yoyD),parseFloat((m25>0?yoyD/m25*100:0).toFixed(1)),
+        Math.round(vsG),parseFloat((mGoal>0?vsG/mGoal*100:0).toFixed(1)),
+        parseFloat((avgMargin*100).toFixed(1)),actDays
+      ]);
+    }
+    const ws2=XLSX.utils.aoa_to_sheet(monthRows);
+    ws2['!cols']=[{wch:12},{wch:13},{wch:13},{wch:13},{wch:11},{wch:9},{wch:11},{wch:10},{wch:13},{wch:11}];
+    XLSX.utils.book_append_sheet(wb,ws2,'Monthly Summary');
+
+    XLSX.writeFile(wb,'tbn_planner_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  };
+  script.onerror=()=>alert('Could not load XLSX library. Try CSV export instead.');
+  document.head.appendChild(script);
+}
+
+function exportData(){
+  const payload={
+    exportedAt: new Date().toISOString(),
+    version: '2026-v3',
+    ev: lsGet('ev')||{},
+    ua: lsGet('ua')||{},
+    ug: lsGet('ug')||{},
+    lp: lsGet('lp')||{},
+    un: lsGet('un')||{},
+    umg: lsGet('umg')||{}
+  };
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='tbn_planner_export_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function importData(jsonStr){
+  try{
+    const d=JSON.parse(jsonStr);
+    if(d.ev) lsSet('ev',d.ev);
+    if(d.ua) lsSet('ua',d.ua);
+    if(d.ug) lsSet('ug',d.ug);
+    if(d.lp) lsSet('lp',d.lp);
+    if(d.un) lsSet('un',d.un);
+    if(d.umg){lsSet('umg',d.umg);userMonthGoals=d.umg;Object.keys(d.umg).forEach(function(m){MONTH_GOALS[parseInt(m)]=d.umg[m];});}
+    // Reload state
+    evSel=lsGet('ev')||{};
+    userAct=lsGet('ua')||{};
+    userGoals=lsGet('ug')||{};
+    lockedProj=lsGet('lp')||{};
+    userNotes=lsGet('un')||{};
+    buildOverview();buildPlanner();updateAnnual();
+    if(_chartsBuilt)_updateCharts();
+    alert('Data imported successfully!');
+  }catch(e){alert('Import failed: '+e.message);}
+}
+
+// Init
+// Global error handler to catch silent failures
+window.onerror=function(msg,src,line,col,err){
+  console.error('JS Error:',msg,'at line',line);
+  var el=document.getElementById('bench-body');
+  if(el&&el.innerHTML==='') el.innerHTML='<tr><td colspan="11" style="padding:10px;color:red;font-size:11px">JS Error: '+msg+' (line '+line+')</td></tr>';
+  return false;
+};
+// Build with localStorage first (instant), then Firestore will update if available
+try{recalcBaseline();}catch(e){console.warn('recalcBaseline:',e);}
+try{buildOverview();}catch(e){console.error('buildOverview:',e);}
+try{buildPlanner();}catch(e){console.error('buildPlanner:',e);}
+try{buildMonthNav();}catch(e){console.error('buildMonthNav:',e);}
+try{buildBenchmarks();}catch(e){console.error('buildBenchmarks:',e);}
+try{updateAnnual();}catch(e){console.error('updateAnnual:',e);}
+// Then load from Firestore (overwrites with shared team data)
+if(window.fbLoad) window.fbLoad();
+// Measure after full render — fonts + layout must be settled
+document.fonts.ready.then(()=>{
+  setStickyOffset();
+  setTimeout(setStickyOffset,200);
+});
+window.addEventListener('resize',setStickyOffset);
+
+// Actuals month filter
+(function(){
+  const f=document.getElementById('act-filter');
+  const allBtn=document.createElement('button');
+  allBtn.className='af-btn nt active';allBtn.style.cssText='padding:3px 9px;font-size:10px';
+  allBtn.textContent='All';
+  allBtn.onclick=()=>{actFilterMon=null;document.querySelectorAll('.af-btn').forEach(b=>b.className='af-btn nt');allBtn.className='af-btn nt active';buildActualsTab(null);};
+  f.appendChild(allBtn);
+  ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach((mn,i)=>{
+    const btn=document.createElement('button');btn.className='af-btn nt';btn.style.cssText='padding:3px 9px;font-size:10px';
+    btn.textContent=mn;
+    btn.onclick=()=>{actFilterMon=i+1;document.querySelectorAll('.af-btn').forEach(b=>b.className='af-btn nt');btn.className='af-btn nt active';buildActualsTab(i+1);};
+    f.appendChild(btn);
+  });
+})();
+</script>
+</body>
+</html>

@@ -129,6 +129,7 @@
       if(d.lp) lockedProj=d.lp;
       if(d.un) userNotes=d.un;
           if(d.umg){userMonthGoals=d.umg;Object.keys(d.umg).forEach(function(m){MONTH_GOALS[parseInt(m)]=d.umg[m];});}
+          if(d.ws) weeklySpend=d.ws;
       try{recalcBaseline();}catch(e){}
       buildOverview();buildPlanner();if(curActTab)buildActualsTab(actFilterMon);
       updateAnnual();if(_chartsBuilt)_updateCharts();
@@ -290,6 +291,7 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
   <button class="nt nt-main" onclick="showTab('yoy')">YOY Comparison</button>
   <button class="nt nt-main" onclick="showTab('benchmarks')">Event Benchmarks</button>
   <button class="nt nt-main" onclick="showTab('scenario')">Scenario Calculator</button>
+  <button class="nt nt-main" onclick="showTab('weeklysummary')">Weekly Summary</button>
 </div>
 <main>
 
@@ -618,6 +620,32 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
   </div>
 </div>
 
+<div id="tab-weeklysummary" style="display:none">
+  <div class="notice">Week-by-week plan vs actual. Enter planned spend in the Daily Planner week rows. Team Goal vs Model projection tracked side by side.</div>
+  <div class="tbl-wrap"><div class="tbl-scroll">
+  <table>
+  <thead>
+    <tr>
+      <th style="width:60px">Week</th>
+      <th style="width:100px">Dates</th>
+      <th class="r" style="width:80px">Team Goal</th>
+      <th class="r" style="width:80px">Model Proj</th>
+      <th class="r" style="width:80px">Actual</th>
+      <th class="r" style="width:80px">vs Team Goal</th>
+      <th class="r" style="width:80px">vs Model</th>
+      <th class="r" style="width:80px">Planned Spend</th>
+      <th class="r" style="width:70px">ROAS</th>
+      <th class="r" style="width:70px">CM$</th>
+      <th class="r" style="width:70px">Margin %</th>
+      <th style="width:100px">Top Event</th>
+      <th style="width:80px">Status</th>
+    </tr>
+  </thead>
+  <tbody id="weekly-summary-body"></tbody>
+  </table>
+  </div></div>
+</div>
+
 </main>
 <script>
 const ACTUALS_2026={}; // actuals now stored in localStorage
@@ -771,7 +799,8 @@ let userAct=lsGet('ua')||{};
 let userGoals=lsGet('ug')||{};  // user-overridden daily goals
 let lockedProj=lsGet('lp')||{}; // locked projections — only reset when event type or goal changes
 let userNotes=lsGet('un')||{};  // custom callout labels per day
-let userMonthGoals=lsGet('umg')||{}; // user-overridden monthly goals
+let userMonthGoals=lsGet('umg')||{};
+let weeklySpend=lsGet('ws')||{};  // planned weekly spend keyed by wkNum // user-overridden monthly goals
 // Apply saved monthly goals on load
 (function(){Object.keys(userMonthGoals).forEach(function(m){MONTH_GOALS[parseInt(m)]=userMonthGoals[m];});})();
 
@@ -1023,7 +1052,17 @@ function buildPlanner(){
       const wkSun=new Date(wkMon.getFullYear(),wkMon.getMonth(),wkMon.getDate()+6);
       const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
       wkRow=document.createElement('tr');wkRow.className='week-row';
-      wkRow.innerHTML=`<td colspan="9" style="font-size:10px;color:var(--bark);padding:5px 8px;font-weight:500">W${wk} &nbsp;·&nbsp; ${fmt(wkMon)}&ndash;${fmt(wkSun)}</td>
+      const wkSpendVal=weeklySpend[wk]||'';
+    const wkSpendDisplay=wkSpendVal?'$'+Math.round(wkSpendVal/1000)+'K planned spend':'';
+    wkRow.innerHTML=`<td colspan="6" style="font-size:10px;color:var(--bark);padding:5px 8px;font-weight:500">W${wk} &nbsp;·&nbsp; ${fmt(wkMon)}&ndash;${fmt(wkSun)}
+      <span style="margin-left:10px;font-weight:400;color:var(--bark);opacity:.7">
+        Spend: <input type="number" value="${wkSpendVal}" placeholder="planned $"
+          onchange="setWeeklySpend(${wk},this.value)"
+          onclick="event.stopPropagation()"
+          style="width:80px;font-size:10px;padding:1px 4px;border:1px solid var(--bd);border-radius:3px;background:rgba(255,255,255,.8);color:var(--char);font-family:'DM Sans',sans-serif"/>
+      </span>
+    </td>
+        <td colspan="3" style="font-size:10px;color:var(--bark);text-align:right;padding-right:8px">${wkSpendDisplay?'<span style="color:var(--sky)">'+wkSpendDisplay+'</span>':''}</td>
         <td class="r wg" style="font-size:10px;color:var(--bark)">--</td>
         <td class="r wn" style="font-size:11px;font-weight:500">--</td>
         <td class="r wv" style="font-size:11px;font-weight:500">--</td>
@@ -1341,14 +1380,15 @@ function buildBenchmarks(){
 
 // Tab switching
 function showTab(name){
-  ['overview','planner','actuals','charts','yoy','benchmarks','scenario'].forEach(t=>document.getElementById('tab-'+t).style.display=t===name?'':'none');
-  document.querySelectorAll('.nt-main').forEach((b,i)=>b.className='nt nt-main'+(['overview','planner','actuals','charts','yoy','benchmarks','scenario'][i]===name?' active':''));
+  ['overview','planner','actuals','charts','yoy','benchmarks','scenario','weeklysummary'].forEach(t=>document.getElementById('tab-'+t).style.display=t===name?'':'none');
+  document.querySelectorAll('.nt-main').forEach((b,i)=>b.className='nt nt-main'+(['overview','planner','actuals','charts','yoy','benchmarks','scenario','weeklysummary'][i]===name?' active':''));
   curActTab=(name==='actuals');
   if(name==='actuals') buildActualsTab(actFilterMon);
   if(name==='charts') _initCharts();
   if(name==='yoy') buildYOY();
   if(name==='benchmarks') setTimeout(buildBenchmarks,10);
   if(name==='scenario') buildScenario();
+  if(name==='weeklysummary') buildWeeklySummary();
 }
 
 // Set sticky header offset dynamically based on actual rendered heights
@@ -2178,6 +2218,101 @@ function resetScenario(){
   updateScenario();
 }
 
+function setWeeklySpend(wkNum, val){
+  const n = parseFloat(String(val).replace(/[$,]/g,''));
+  if(isNaN(n) || n <= 0) delete weeklySpend[wkNum];
+  else weeklySpend[wkNum] = n;
+  lsSet('ws', weeklySpend);
+  buildPlanner();
+}
+
+function buildWeeklySummary(){
+  const tbody=document.getElementById('weekly-summary-body');
+  if(!tbody) return;
+  tbody.innerHTML='';
+  const today=TODAY_ISO;
+
+  // Group days by week
+  const weeks={};
+  DAYS.forEach(function(d){
+    const k=d.wkNum;
+    if(!weeks[k]) weeks[k]={wkNum:k,days:[],mon:d.mon};
+    weeks[k].days.push(d);
+  });
+
+  Object.keys(weeks).sort(function(a,b){return a-b;}).forEach(function(wkNum){
+    const wk=weeks[wkNum];
+    const days=wk.days;
+    const first=days[0];
+    const last=days[days.length-1];
+    const fmt=function(iso){return iso.slice(5).replace('-','/');};
+
+    // Aggregate
+    let teamGoal=0,modelProj=0,actual=0,actDays=0,totalMargin=0,margDays=0;
+    let totalCMS=0,topEvents={};
+    days.forEach(function(d){
+      const dd=getDayData(d.iso);
+      if(!dd) return;
+      teamGoal+=dd.goal;
+      modelProj+=dd.projNet;
+      if(dd.isAct){
+        actual+=dd.net;actDays++;
+        if(dd.actualMargin){totalMargin+=dd.actualMargin;margDays++;}
+        if(dd.cms!=null) totalCMS+=dd.cms;
+      }
+      // Track events
+      const ev=getEv(d.iso);
+      if(ev!=='None') topEvents[ev]=(topEvents[ev]||0)+1;
+    });
+
+    const spend=weeklySpend[wkNum]||null;
+    const roas=spend&&actual>0?actual/spend:null;
+    const avgMargin=margDays>0?totalMargin/margDays:null;
+    const isComplete=last.iso<=today;
+    const isActive=first.iso<=today&&last.iso>=today;
+    const isFuture=first.iso>today;
+
+    // Top event
+    const topEv=Object.keys(topEvents).sort(function(a,b){return topEvents[b]-topEvents[a];})[0]||'BAU';
+
+    // Status
+    let status,statusColor,statusBg;
+    if(isFuture){status='Planned';statusColor='#185FA5';statusBg='#E6F1FB';}
+    else if(isActive){status='In Progress';statusColor='#BA7517';statusBg='#FAEEDA';}
+    else if(actual>0){
+      const vsTeam=actual-teamGoal;
+      if(vsTeam>=0){status='Beat Goal';statusColor='#3B6D11';statusBg='#EAF3DE';}
+      else if(vsTeam>=-teamGoal*0.05){status='Near Goal';statusColor='#BA7517';statusBg='#FAEEDA';}
+      else{status='Missed';statusColor='#A32D2D';statusBg='#FCEBEB';}
+    } else {status='No Data';statusColor='#8C7B6B';statusBg='#F0EDE6';}
+
+    const vsTeam=actual>0?actual-teamGoal:null;
+    const vsModel=actual>0?actual-modelProj:null;
+    const clr=function(n){return n>=0?'var(--forest)':'var(--rose)';};
+    const f$=function(n){return '$'+Math.round(Math.abs(n)).toLocaleString();};
+    const fK=function(n){if(n==null)return '--';const abs=Math.abs(n);const s=n<0?'-':'';return s+(abs>=1e6?'$'+(abs/1e6).toFixed(2)+'M':abs>=1e3?'$'+Math.round(abs/1e3)+'K':'$'+Math.round(abs));};
+    const signed=function(n){return n==null?'--':(n>=0?'+':'')+fK(n);};
+
+    const tr=document.createElement('tr');
+    tr.style.background=isActive?'rgba(186,117,23,.04)':'';
+    tr.innerHTML=
+      '<td style="font-size:11px;font-weight:500;color:var(--char)">W'+wkNum+'</td>'+
+      '<td style="font-size:10px;color:var(--bark)">'+fmt(first.iso)+'&ndash;'+fmt(last.iso)+'</td>'+
+      '<td class="r" style="font-size:11px">'+fK(teamGoal)+'</td>'+
+      '<td class="r" style="font-size:11px;color:var(--sky)">'+fK(modelProj)+'</td>'+
+      '<td class="r" style="font-size:11px;font-weight:'+(actual>0?'500':'400')+';color:'+(actual>0?'var(--forest)':'var(--bark)')+'">'+fK(actual)+'</td>'+
+      '<td class="r" style="font-size:11px;color:'+clr(vsTeam||0)+'">'+signed(vsTeam)+'</td>'+
+      '<td class="r" style="font-size:11px;color:'+clr(vsModel||0)+'">'+signed(vsModel)+'</td>'+
+      '<td class="r" style="font-size:11px;color:var(--char)">'+(spend?fK(spend):'<span style="color:var(--bark);font-size:10px">enter spend</span>')+'</td>'+
+      '<td class="r" style="font-size:11px;color:var(--char)">'+(roas?roas.toFixed(1)+'x':'--')+'</td>'+
+      '<td class="r" style="font-size:11px;color:'+(totalCMS>0?'var(--forest)':'var(--rose)')+'">'+fK(totalCMS||null)+'</td>'+
+      '<td class="r" style="font-size:11px">'+(avgMargin?(avgMargin*100).toFixed(1)+'%':'--')+'</td>'+
+      '<td style="font-size:10px;color:var(--char)">'+topEv.replace('Early Access-','EA ').replace('Sitewide','SW')+'</td>'+
+      '<td><span style="font-size:10px;padding:1px 7px;border-radius:8px;background:'+statusBg+';color:'+statusColor+'">'+status+'</span></td>';
+    tbody.appendChild(tr);
+  });
+}
+
 function exportCSV(){
   const rows=buildExportRows();
   const csv=rows.map(row=>row.map(v=>{
@@ -2265,7 +2400,8 @@ function exportData(){
     ug: lsGet('ug')||{},
     lp: lsGet('lp')||{},
     un: lsGet('un')||{},
-    umg: lsGet('umg')||{}
+    umg: lsGet('umg')||{},
+    ws: lsGet('ws')||{}
   };
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
@@ -2284,6 +2420,7 @@ function importData(jsonStr){
     if(d.lp) lsSet('lp',d.lp);
     if(d.un) lsSet('un',d.un);
     if(d.umg){lsSet('umg',d.umg);userMonthGoals=d.umg;Object.keys(d.umg).forEach(function(m){MONTH_GOALS[parseInt(m)]=d.umg[m];});}
+    if(d.ws){lsSet('ws',d.ws);weeklySpend=d.ws;}
     // Reload state
     evSel=lsGet('ev')||{};
     userAct=lsGet('ua')||{};

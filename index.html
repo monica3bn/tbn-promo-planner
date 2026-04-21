@@ -207,6 +207,8 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
 .badge-today{background:var(--sklt);color:var(--sky)}
 .badge-sp{background:var(--amlt);color:var(--amb)}
 .badge-note{background:var(--sklt);color:var(--sky);cursor:pointer}
+.col-extra{display:none}
+.cols-expanded .col-extra{display:table-cell}
 .note-input{font-size:10px;padding:2px 6px;border:1px dashed var(--sky);border-radius:3px;background:var(--sklt);color:var(--sky);width:90px;font-family:'DM Sans',sans-serif}
 .note-input::placeholder{color:var(--sky);opacity:.5}
 .chart-box{background:#fff;border:1px solid var(--bd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1rem}
@@ -328,7 +330,10 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
     <span style="font-size:12px;color:var(--bark)">Jump to month:</span>
     <div id="month-nav" style="display:flex;gap:5px;flex-wrap:wrap"></div>
   </div>
-  <div class="notice">Locked rows (Jan 1&ndash;Mar 25) show real actuals in green. Future rows show <em>proj</em> amount + event basis — change the event type dropdown to re-model instantly. Weekly totals in shaded rows show goal / projected / actual split.</div>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:.75rem">
+    <div class="notice" style="margin-bottom:0;flex:1">Locked rows show real actuals in green. Future rows show <em>proj</em> amount + event basis. Weekly totals show goal / proj / actual split.</div>
+    <button id="col-toggle-btn" onclick="toggleExtraCols()" style="font-size:11px;padding:5px 12px;border:1px solid var(--bdm);border-radius:4px;background:#fff;color:var(--char);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap" onmouseover="this.style.borderColor='var(--esp)'" onmouseout="this.style.borderColor='var(--bdm)'">&#43; Show More Columns</button>
+  </div>
   <div class="tbl-wrap"><div class="tbl-scroll">
   <table>
   <thead><tr>
@@ -345,13 +350,13 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
     <th class="r" style="width:48px">ROAS</th>
     <th class="r" style="width:46px">CVR</th>
     <th class="r" style="width:60px">Proj Margin</th><th class="r" style="width:64px">Act Margin</th>
-    <th class="r" style="width:68px">Sessions</th>
-    <th class="r" style="width:58px" title="Revenue Per Session">RPS</th>
-    <th class="r" style="width:58px" title="Cost Per Session">CPS</th>
-    <th class="r" style="width:70px" title="Contribution Margin $ = Gross Margin - Ad Spend">CM$</th>
-    <th class="r" style="width:70px">Est Returns</th>
-    <th class="r" style="width:68px">2025 Net</th>
-    <th class="r" style="width:56px">YOY</th>
+    <th class="r col-extra" style="width:68px">Sessions</th>
+    <th class="r col-extra" style="width:58px" title="Revenue Per Session">RPS</th>
+    <th class="r col-extra" style="width:58px" title="Cost Per Session">CPS</th>
+    <th class="r col-extra" style="width:70px" title="Contribution Margin $">CM$</th>
+    <th class="r col-extra" style="width:70px">Est Returns</th>
+    <th class="r col-extra" style="width:68px">2025 Net</th>
+    <th class="r col-extra" style="width:56px">YOY</th>
   </tr></thead>
   <tbody id="plan-body"></tbody>
   </table>
@@ -1034,13 +1039,13 @@ function buildPlanner(){
       <td class="r" style="${dd.isAct?'color:var(--forest);font-weight:500':''};font-size:11px">${dd.cvr!=null?pct(dd.cvr):pct(dd.ev.cvr)}</td>
       <td class="r" style="font-size:11px;color:var(--bark)">${pct(dd.projMargin)}</td>
       <td class="r" style="font-size:11px;${dd.actualMargin!=null?'color:var(--forest);font-weight:500':'color:var(--tan)'}">${dd.actualMargin!=null?pct(dd.actualMargin):'—'}</td>
-      <td class="r" style="font-size:11px;color:var(--bark)">${fN(dd.sessions)}</td>
-      <td class="r" style="font-size:11px;color:${dd.isAct?'var(--forest)':'var(--bark)'}">${dd.rps!=null?'$'+(dd.rps).toFixed(2):'--'}</td>
-      <td class="r" style="font-size:11px;color:${dd.isAct?'var(--forest)':'var(--bark)'}">${dd.cps!=null?'$'+(dd.cps).toFixed(3):'--'}</td>
-      <td class="r" style="font-size:11px;color:${dd.cms!=null?(dd.cms>0?'var(--forest)':'var(--rose)'):'var(--bark)'};font-weight:${dd.cms!=null?'500':'400'}">${dd.cms!=null?f$(dd.cms):'--'}</td>
-      <td class="r" style="color:${retC};font-size:11px">${f$(dd.estReturns)}</td>
-      <td class="r muted" style="font-size:11px">${dd.yoy25!=null?f$(dd.yoy25):'--'}</td>
-      <td class="r" style="color:${yD!=null?clr(yD):'inherit'};font-size:11px">${yD!=null?(yD>=0?'+':'')+fK(yD):'--'}</td>
+      <td class="r col-extra" style="font-size:11px;color:var(--bark)">${fN(dd.sessions)}</td>
+      <td class="r col-extra" style="font-size:11px;color:${dd.isAct?'var(--forest)':'var(--bark)'}">${dd.rps!=null?'$'+(dd.rps).toFixed(2):'--'}</td>
+      <td class="r col-extra" style="font-size:11px;color:${dd.isAct?'var(--forest)':'var(--bark)'}">${dd.cps!=null?'$'+(dd.cps).toFixed(3):'--'}</td>
+      <td class="r col-extra" style="font-size:11px;color:${dd.cms!=null?(dd.cms>0?'var(--forest)':'var(--rose)'):'var(--bark)'};font-weight:${dd.cms!=null?'500':'400'}">${dd.cms!=null?f$(dd.cms):'--'}</td>
+      <td class="r col-extra" style="color:${retC};font-size:11px">${f$(dd.estReturns)}</td>
+      <td class="r col-extra muted" style="font-size:11px">${dd.yoy25!=null?f$(dd.yoy25):'--'}</td>
+      <td class="r col-extra" style="color:${yD!=null?clr(yD):'inherit'};font-size:11px">${yD!=null?(yD>=0?'+':'')+fK(yD):'--'}</td>
     `;
     tbody.appendChild(tr);
   });

@@ -818,9 +818,11 @@ function buildPlanner(){
   function flushWk(){
     if(!wkRow) return;
     const diff=wkNet-wkGoal;
-    wkRow.querySelector('.wg').textContent=fK(wkGoal);
-    wkRow.querySelector('.wn').textContent=fK(wkNet);
-    const wv=wkRow.querySelector('.wv');wv.textContent=(diff>=0?'+':'')+fK(diff);wv.style.color=diff>=0?'#3B6D11':'#A32D2D';
+    wkRow.querySelector('.wg').innerHTML='<span style="font-size:9px;color:var(--bark);opacity:.6">Goal </span>'+fK(wkGoal);
+    wkRow.querySelector('.wn').innerHTML='<span style="font-size:9px;color:var(--bark);opacity:.6">Proj </span>'+fK(wkNet);
+    const wv=wkRow.querySelector('.wv');
+    const diffColor=diff>=0?'#3B6D11':'#A32D2D';
+    wv.innerHTML='<span style="font-size:9px;color:var(--bark);opacity:.6">vs Goal </span><span style="color:'+diffColor+';font-weight:500">'+(diff>=0?'+':'')+fK(diff)+'</span>';
     if(wkActDays>0){
       const wa=wkRow.querySelector('.wa');
       wa.textContent=fK(wkActNet)+' actual · '+fK(wkNet-wkActNet)+' proj remaining';

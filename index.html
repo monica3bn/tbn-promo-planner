@@ -207,8 +207,8 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
 .badge-today{background:var(--sklt);color:var(--sky)}
 .badge-sp{background:var(--amlt);color:var(--amb)}
 .badge-note{background:var(--sklt);color:var(--sky);cursor:pointer}
-.col-extra{display:none}
-.cols-expanded .col-extra{display:table-cell}
+.col-extra{display:none !important}
+.cols-expanded .col-extra{display:table-cell !important}
 .note-input{font-size:10px;padding:2px 6px;border:1px dashed var(--sky);border-radius:3px;background:var(--sklt);color:var(--sky);width:90px;font-family:'DM Sans',sans-serif}
 .note-input::placeholder{color:var(--sky);opacity:.5}
 .chart-box{background:#fff;border:1px solid var(--bd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1rem}
@@ -1827,6 +1827,17 @@ Be concise and specific. Use markdown headers.`;
   btn.disabled=false;
 }
 
+
+// ── Column toggle ─────────────────────────────────────────────────────────────
+var _colsExpanded=false;
+function toggleExtraCols(){
+  _colsExpanded=!_colsExpanded;
+  // Toggle class on the planner table
+  var table=document.querySelector('#tab-planner table');
+  if(table) table.classList.toggle('cols-expanded',_colsExpanded);
+  var btn=document.getElementById('col-toggle-btn');
+  if(btn) btn.textContent=_colsExpanded?'− Show Less':'+ Show More Columns';
+}
 
 function exportCSV(){
   const rows=buildExportRows();

@@ -249,7 +249,7 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
 </div>
 
 <!-- App (hidden until logged in) -->
-<div id="app-wrapper" style="display:none">
+<div id="app-wrapper" style="display:none;min-height:100vh">
 <header>
   <div><div class="logo">THREE BIRD NEST <span>&middot;</span> 2026 Promo Planner</div></div>
   <div style="display:flex;align-items:center;gap:12px">
@@ -335,7 +335,7 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
     <th style="width:30px">DOW</th>
     <th style="width:150px">Event Type</th>
     <th class="r" style="width:88px">Team Goal</th>
-    <th class="r" style="width:88px">Model Suggestion</th>
+    <th class="r" style="width:88px" title="Monthly goal distributed by event lift weight">Goal Dist.</th>
     <th style="width:140px">Event Rec</th>
     <th class="r" style="width:88px">Projected</th>
     <th class="r" style="width:88px">Actual</th>
@@ -722,10 +722,18 @@ function getDayData(iso){
   const retRisk=ev.retRate<0.08?'low':ev.retRate<0.11?'med':'high';
   const yiso=iso.replace('2026','2025');
   const y25=ACTUALS_2025[yiso]||null;
-    // Model suggestion: what the tool recommends based on event plan
-  // = projNet (already computed above)
-  // As a % of monthly model total, redistributed to monthly team goal
-  const modelSug=_rawProjNet; // raw projection before any lock
+    // Model Suggestion: redistribute monthly goal weighted by each day's lift
+  // = (this day's lift weight / sum of all days' lift weights) * monthly goal
+  // This shows what share of the monthly goal each day "should" target
+  const mDaysForSug=DAYS.filter(function(d){return d.mon===day.mon;});
+  const totalLiftWeight=mDaysForSug.reduce(function(s,d){
+    const ev2=LIFT[getEv(d.iso)]||LIFT['None'];
+    const base2=DOW_BASE[d.dow]||{net:0};
+    return s+base2.net*(ev2.lift||1);
+  },0);
+  const thisLiftWeight=(DOW_BASE[day.dow]||{net:0}).net*((LIFT[getEv(day.iso)]||LIFT['None']).lift||1);
+  const mGoalForSug=MONTH_GOALS[day.mon]||0;
+  const modelSug=totalLiftWeight>0?Math.round(mGoalForSug*(thisLiftWeight/totalLiftWeight)):_rawProjNet;
   return{...day,goal,evName,ev,isAct,hasCSV,hasUA,modelSug,
     net:displayNet,actualNet:net,projNet,projMargin,actualMargin,
     sessions:sessions||projSess,
@@ -872,7 +880,16 @@ function buildPlanner(){
       const wkSun=new Date(wkMon.getFullYear(),wkMon.getMonth(),wkMon.getDate()+6);
       const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
       wkRow=document.createElement('tr');wkRow.className='week-row';
-      wkRow.innerHTML=`<td colspan="6" style="font-size:10px;color:var(--bark);padding:5px 8px;font-weight:500">W${wk} &nbsp;·&nbsp; ${fmt(wkMon)}&ndash;${fmt(wkSun)}</td><td class="r wg" style="font-size:10px;color:var(--bark)">--</td><td class="r wn" style="font-size:11px;font-weight:500">--</td><td class="r wv" style="font-size:11px;font-weight:500">--</td><td class="wa" colspan="7" style="font-size:10px;color:var(--forest);padding-left:12px"></td>`;
+      wkRow.innerHTML=`<td colspan="6" style="font-size:10px;color:var(--bark);padding:5px 8px;font-weight:500">W${wk} &nbsp;·&nbsp; ${fmt(wkMon)}&ndash;${fmt(wkSun)}</td>
+        <td class="r" style="font-size:9px;color:var(--bark);opacity:.6;padding-bottom:1px;vertical-align:bottom">WK GOAL</td>
+        <td class="r" style="font-size:9px;color:var(--bark);opacity:.6;padding-bottom:1px;vertical-align:bottom">WK PROJ</td>
+        <td class="r" style="font-size:9px;color:var(--bark);opacity:.6;padding-bottom:1px;vertical-align:bottom">VS GOAL</td>
+        <td class="wa" colspan="7" style="font-size:10px;color:var(--forest);padding-left:12px"></td>
+        </tr><tr class="week-row"><td colspan="6"></td>
+        <td class="r wg" style="font-size:11px;font-weight:500;color:var(--bark)">--</td>
+        <td class="r wn" style="font-size:11px;font-weight:500">--</td>
+        <td class="r wv" style="font-size:11px;font-weight:500">--</td>
+        <td class="wa" colspan="7" style="font-size:10px;color:var(--forest);padding-left:12px"></td>`;
       tbody.appendChild(wkRow);
     }
     wkNet+=dd.net;wkGoal+=dd.goal;

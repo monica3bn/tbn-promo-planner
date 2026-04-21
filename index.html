@@ -289,6 +289,7 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
   <button class="nt nt-main" onclick="showTab('charts')">Charts</button>
   <button class="nt nt-main" onclick="showTab('yoy')">YOY Comparison</button>
   <button class="nt nt-main" onclick="showTab('benchmarks')">Event Benchmarks</button>
+  <button class="nt nt-main" onclick="showTab('scenario')">Scenario Calculator</button>
 </div>
 <main>
 
@@ -499,6 +500,122 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
   <tbody id="bench-body"></tbody>
   </table>
   </div></div>
+</div>
+
+<div id="tab-scenario" style="display:none">
+  <div style="display:grid;grid-template-columns:280px 1fr;gap:1.5rem;align-items:start">
+
+    <!-- LEFT: Inputs -->
+    <div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:1.25rem;position:sticky;top:152px">
+      <div style="font-family:'Playfair Display',serif;font-size:14px;color:var(--esp);margin-bottom:1rem">Scenario Inputs</div>
+
+      <!-- Week selector -->
+      <div style="margin-bottom:1rem">
+        <label style="font-size:10px;font-weight:500;color:var(--bark);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:4px">Week</label>
+        <select id="sc-week" onchange="buildScenario()" style="width:100%;font-size:12px;padding:6px 8px;border:1px solid var(--bdm);border-radius:4px;font-family:'DM Sans',sans-serif">
+        </select>
+      </div>
+
+      <!-- Margin slider -->
+      <div style="margin-bottom:1rem">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <label style="font-size:10px;font-weight:500;color:var(--bark);text-transform:uppercase;letter-spacing:.05em">Margin %</label>
+          <span id="sc-margin-val" style="font-size:12px;font-weight:500;color:var(--esp)">60.0%</span>
+        </div>
+        <input type="range" id="sc-margin" min="40" max="75" step="0.5" value="60"
+          oninput="document.getElementById('sc-margin-val').textContent=this.value+'%';updateScenario()"
+          style="width:100%;accent-color:var(--esp)"/>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--bark);margin-top:2px">
+          <span>40% deep promo</span><span>75% full price</span>
+        </div>
+      </div>
+
+      <!-- Ad Spend slider -->
+      <div style="margin-bottom:1.25rem">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <label style="font-size:10px;font-weight:500;color:var(--bark);text-transform:uppercase;letter-spacing:.05em">Weekly Ad Spend</label>
+          <span id="sc-spend-val" style="font-size:12px;font-weight:500;color:var(--esp)">$100K</span>
+        </div>
+        <input type="range" id="sc-spend" min="50000" max="350000" step="5000" value="100000"
+          oninput="document.getElementById('sc-spend-val').textContent='$'+Math.round(this.value/1000)+'K';updateScenario()"
+          style="width:100%;accent-color:var(--esp)"/>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--bark);margin-top:2px">
+          <span>$50K</span><span>$350K</span>
+        </div>
+      </div>
+
+      <!-- Model info -->
+      <div style="background:var(--sand);border-radius:6px;padding:.75rem;font-size:11px;color:var(--bark);line-height:1.6;margin-bottom:1rem">
+        <div style="font-weight:500;color:var(--char);margin-bottom:.25rem">Relationship Model <span style="font-size:10px;font-weight:400;color:var(--forest)">from actuals</span></div>
+        <div>Margin → RPS slope: <span id="sc-rps-slope" style="color:var(--char);font-weight:500">--</span></div>
+        <div>Modelled RPS: <span id="sc-rps" style="color:var(--char);font-weight:500">--</span></div>
+        <div>Modelled ROAS: <span id="sc-roas-model" style="color:var(--char);font-weight:500">--</span></div>
+        <div>Derived CPS: <span id="sc-cps-model" style="color:var(--char);font-weight:500">--</span></div>
+      </div>
+
+      <!-- Override toggle -->
+      <div style="margin-bottom:.75rem">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--char)">
+          <input type="checkbox" id="sc-override" onchange="buildScenario()" style="accent-color:var(--esp)"/>
+          Override model (manual RPS / ROAS)
+        </label>
+      </div>
+      <div id="sc-override-inputs" style="display:none;gap:8px;margin-bottom:1rem">
+        <div>
+          <label style="font-size:10px;color:var(--bark);display:block;margin-bottom:2px">Manual RPS $</label>
+          <input type="number" id="sc-manual-rps" value="3.00" step="0.01" oninput="updateScenario()"
+            style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--bdm);border-radius:4px;font-family:'DM Sans',sans-serif"/>
+        </div>
+        <div style="margin-top:8px">
+          <label style="font-size:10px;color:var(--bark);display:block;margin-bottom:2px">Manual ROAS ×</label>
+          <input type="number" id="sc-manual-roas" value="6.5" step="0.1" oninput="updateScenario()"
+            style="width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--bdm);border-radius:4px;font-family:'DM Sans',sans-serif"/>
+        </div>
+      </div>
+
+      <button onclick="resetScenario()" style="width:100%;font-size:11px;padding:5px;border:1px solid var(--bd);border-radius:4px;background:transparent;color:var(--bark);cursor:pointer;font-family:'DM Sans',sans-serif">Reset to Actuals Baseline</button>
+    </div>
+
+    <!-- RIGHT: Live Output -->
+    <div>
+      <!-- Big numbers -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+        <div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:1.25rem">
+          <div style="font-size:10px;color:var(--bark);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.25rem">CM$</div>
+          <div id="sc-out-cms" style="font-size:28px;font-weight:500;font-family:'Playfair Display',serif;color:var(--forest)">--</div>
+          <div id="sc-out-cms-note" style="font-size:11px;color:var(--bark);margin-top:2px">--</div>
+        </div>
+        <div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:1.25rem">
+          <div style="font-size:10px;color:var(--bark);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.25rem">CM%</div>
+          <div id="sc-out-cmpct" style="font-size:28px;font-weight:500;font-family:'Playfair Display',serif;color:var(--char)">--</div>
+          <div style="font-size:11px;color:var(--bark);margin-top:2px">of revenue</div>
+        </div>
+        <div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:1.25rem">
+          <div style="font-size:10px;color:var(--bark);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.25rem">Revenue</div>
+          <div id="sc-out-rev" style="font-size:28px;font-weight:500;font-family:'Playfair Display',serif;color:var(--char)">--</div>
+          <div style="font-size:11px;color:var(--bark);margin-top:2px">sessions &times; RPS</div>
+        </div>
+        <div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:1.25rem">
+          <div style="font-size:10px;color:var(--bark);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.25rem">Sessions</div>
+          <div id="sc-out-sess" style="font-size:28px;font-weight:500;font-family:'Playfair Display',serif;color:var(--char)">--</div>
+          <div style="font-size:11px;color:var(--bark);margin-top:2px">spend &divide; CPS</div>
+        </div>
+      </div>
+
+      <!-- Breakdown table -->
+      <div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:1.25rem;margin-bottom:1rem">
+        <div style="font-size:10px;font-weight:500;color:var(--bark);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem">Week Breakdown</div>
+        <div id="sc-breakdown"></div>
+      </div>
+
+      <!-- CM$ across margin range chart -->
+      <div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:1.25rem">
+        <div style="font-size:10px;font-weight:500;color:var(--bark);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem">CM$ Across Margin Range — at this spend level</div>
+        <div style="position:relative;height:200px"><canvas id="sc-chart"></canvas></div>
+        <div id="sc-insights" style="margin-top:.75rem;font-size:11px;color:var(--bark);line-height:1.7"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 </main>
@@ -1224,13 +1341,14 @@ function buildBenchmarks(){
 
 // Tab switching
 function showTab(name){
-  ['overview','planner','actuals','charts','yoy','benchmarks'].forEach(t=>document.getElementById('tab-'+t).style.display=t===name?'':'none');
-  document.querySelectorAll('.nt-main').forEach((b,i)=>b.className='nt nt-main'+(['overview','planner','actuals','charts','yoy','benchmarks'][i]===name?' active':''));
+  ['overview','planner','actuals','charts','yoy','benchmarks','scenario'].forEach(t=>document.getElementById('tab-'+t).style.display=t===name?'':'none');
+  document.querySelectorAll('.nt-main').forEach((b,i)=>b.className='nt nt-main'+(['overview','planner','actuals','charts','yoy','benchmarks','scenario'][i]===name?' active':''));
   curActTab=(name==='actuals');
   if(name==='actuals') buildActualsTab(actFilterMon);
   if(name==='charts') _initCharts();
   if(name==='yoy') buildYOY();
   if(name==='benchmarks') setTimeout(buildBenchmarks,10);
+  if(name==='scenario') buildScenario();
 }
 
 // Set sticky header offset dynamically based on actual rendered heights
@@ -1837,6 +1955,227 @@ function toggleExtraCols(){
   if(table) table.classList.toggle('cols-expanded',_colsExpanded);
   var btn=document.getElementById('col-toggle-btn');
   if(btn) btn.textContent=_colsExpanded?'− Show Less':'+ Show More Columns';
+}
+
+
+// ── Scenario Calculator ───────────────────────────────────────────────────────
+var _scChart = null;
+
+function buildScenario(){
+  // Populate week selector with remaining future weeks
+  var sel = document.getElementById('sc-week');
+  if(!sel) return;
+  var today = TODAY_ISO;
+  var weeks = {};
+  DAYS.forEach(function(d){
+    if(d.iso < today) return;
+    var k = 'W'+d.wkNum;
+    if(!weeks[k]) weeks[k] = {wkNum:d.wkNum, days:[], label:''};
+    weeks[k].days.push(d);
+  });
+  // Build labels
+  Object.keys(weeks).sort().forEach(function(k){
+    var wk = weeks[k];
+    var first = wk.days[0];
+    var last = wk.days[wk.days.length-1];
+    var fmt = function(iso){return iso.slice(5).replace('-','/');};
+    wk.label = k + ' · ' + fmt(first.iso) + '–' + fmt(last.iso);
+  });
+  var curVal = sel.value;
+  sel.innerHTML = Object.keys(weeks).sort().map(function(k){
+    return '<option value="'+k+'"'+(k===curVal?' selected':'')+'>'+weeks[k].label+'</option>';
+  }).join('');
+
+  // Show/hide override inputs
+  var ov = document.getElementById('sc-override');
+  var ovInputs = document.getElementById('sc-override-inputs');
+  if(ov && ovInputs) ovInputs.style.display = ov.checked ? 'block' : 'none';
+
+  // Compute actuals-based model
+  // Collect actual days with both margin and RPS data
+  var actDays = [];
+  DAYS.forEach(function(d){
+    var ua = userAct[d.iso];
+    if(!ua || !ua.net || !ua.sessions || !ua.actualMargin) return;
+    var rps = ua.net / ua.sessions;
+    var cps = ua.spend ? ua.spend / ua.sessions : null;
+    actDays.push({margin: ua.actualMargin*100, rps: rps, cps: cps,
+      roas: ua.spend ? ua.net/ua.spend : null});
+  });
+
+  // Compute linear regression: margin → RPS
+  var rpsSlope = -0.1323; // default from her model
+  var rpsIntercept = 9.25;
+  if(actDays.length >= 5){
+    var n = actDays.length;
+    var sumX=0,sumY=0,sumXY=0,sumX2=0;
+    actDays.forEach(function(d){sumX+=d.margin;sumY+=d.rps;sumXY+=d.margin*d.rps;sumX2+=d.margin*d.margin;});
+    rpsSlope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
+    rpsIntercept = (sumY - rpsSlope*sumX) / n;
+  }
+
+  // Compute avg CPS from actuals
+  var avgCPS = 0.30; // default
+  var cpsDays = actDays.filter(function(d){return d.cps!=null;});
+  if(cpsDays.length > 0){
+    avgCPS = cpsDays.reduce(function(s,d){return s+d.cps;},0)/cpsDays.length;
+  }
+
+  // Update model display
+  var margin = parseFloat(document.getElementById('sc-margin').value);
+  var spend = parseFloat(document.getElementById('sc-spend').value);
+  var modelRPS = rpsIntercept + rpsSlope * margin;
+  var modelROAS = modelRPS / avgCPS;
+  var modelCPS = avgCPS;
+
+  var slopeEl = document.getElementById('sc-rps-slope');
+  var rpsEl = document.getElementById('sc-rps');
+  var roasEl = document.getElementById('sc-roas-model');
+  var cpsEl = document.getElementById('sc-cps-model');
+  if(slopeEl) slopeEl.textContent = rpsSlope.toFixed(4)+' per pp';
+  if(rpsEl) rpsEl.textContent = '$'+modelRPS.toFixed(2);
+  if(roasEl) roasEl.textContent = modelROAS.toFixed(2)+'x';
+  if(cpsEl) cpsEl.textContent = '$'+modelCPS.toFixed(3);
+
+  updateScenario();
+}
+
+function updateScenario(){
+  var margin = parseFloat(document.getElementById('sc-margin').value)/100;
+  var spend = parseFloat(document.getElementById('sc-spend').value);
+  var ov = document.getElementById('sc-override') && document.getElementById('sc-override').checked;
+
+  // Get selected week days
+  var selWk = document.getElementById('sc-week');
+  if(!selWk) return;
+  var wkNum = parseInt(selWk.value.replace('W',''));
+  var wkDays = DAYS.filter(function(d){return d.wkNum===wkNum;});
+
+  // Compute model RPS from slope
+  var actDays = [];
+  DAYS.forEach(function(d){
+    var ua = userAct[d.iso];
+    if(!ua||!ua.net||!ua.sessions||!ua.actualMargin) return;
+    actDays.push({margin:ua.actualMargin*100, rps:ua.net/ua.sessions,
+      cps:ua.spend?ua.spend/ua.sessions:null});
+  });
+  var rpsSlope=-0.1323, rpsIntercept=9.25, avgCPS=0.30;
+  if(actDays.length>=5){
+    var n=actDays.length,sumX=0,sumY=0,sumXY=0,sumX2=0;
+    actDays.forEach(function(d){sumX+=d.margin;sumY+=d.rps;sumXY+=d.margin*d.rps;sumX2+=d.margin*d.margin;});
+    rpsSlope=(n*sumXY-sumX*sumY)/(n*sumX2-sumX*sumX);
+    rpsIntercept=(sumY-rpsSlope*sumX)/n;
+    var cpsDays=actDays.filter(function(d){return d.cps!=null;});
+    if(cpsDays.length>0) avgCPS=cpsDays.reduce(function(s,d){return s+d.cps;},0)/cpsDays.length;
+  }
+
+  var rps = ov ? parseFloat(document.getElementById('sc-manual-rps').value) : (rpsIntercept + rpsSlope*(margin*100));
+  var roas = ov ? parseFloat(document.getElementById('sc-manual-roas').value) : rps/avgCPS;
+  var cps = ov ? (rps/roas) : avgCPS;
+
+  // Weekly totals — split spend evenly across days
+  var dailySpend = spend / 7;
+  var totalSess=0, totalRev=0, totalGM=0;
+  wkDays.forEach(function(d){
+    var sess = dailySpend / cps;
+    var rev = sess * rps;
+    var gm = rev * margin;
+    totalSess += sess; totalRev += rev; totalGM += gm;
+  });
+  var cms = totalGM - spend;
+  var cmpct = totalRev > 0 ? cms/totalRev : 0;
+  var breakEvenROAS = 1/margin;
+  var actualROAS = spend > 0 ? totalRev/spend : 0;
+
+  // Update outputs
+  var f$ = function(n){return '$'+Math.round(n).toLocaleString();};
+  var fK = function(n){return n>=1e6?'$'+(n/1e6).toFixed(2)+'M':n>=1e3?'$'+Math.round(n/1e3)+'K':f$(n);};
+
+  var cmsEl=document.getElementById('sc-out-cms');
+  if(cmsEl){cmsEl.textContent=fK(cms);cmsEl.style.color=cms>0?'var(--forest)':'var(--rose)';}
+  var cmsNote=document.getElementById('sc-out-cms-note');
+  if(cmsNote) cmsNote.textContent=cms>0?'above breakeven':'below breakeven';
+  var cmpctEl=document.getElementById('sc-out-cmpct');
+  if(cmpctEl) cmpctEl.textContent=(cmpct*100).toFixed(1)+'%';
+  var revEl=document.getElementById('sc-out-rev');
+  if(revEl) revEl.textContent=fK(totalRev);
+  var sessEl=document.getElementById('sc-out-sess');
+  if(sessEl) sessEl.textContent=(totalSess/1000).toFixed(1)+'K';
+
+  // Breakdown table
+  var bk = document.getElementById('sc-breakdown');
+  if(bk) bk.innerHTML = [
+    ['Net sales', fK(totalRev)],
+    ['&times; Margin %', (margin*100).toFixed(1)+'%'],
+    ['= Gross margin $', fK(totalGM)],
+    ['&minus; Ad spend', f$(spend)],
+    ['= CM$', fK(cms)],
+    ['CM% (CM$ &divide; Net Sales)', (cmpct*100).toFixed(1)+'%'],
+    ['Break-even ROAS', breakEvenROAS.toFixed(2)+'x (actual: '+actualROAS.toFixed(2)+'x)'],
+    ['Annualised CM$ run-rate', fK(cms*52)+' / year']
+  ].map(function(row){
+    var isCMS = row[0]==='= CM$';
+    return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bd);font-size:12px'+(isCMS?';font-weight:600;color:var(--esp)':'')+'"><span style="color:var(--bark)">'+row[0]+'</span><span>'+row[1]+'</span></div>';
+  }).join('');
+
+  // CM$ across margin range chart
+  var margins=[],cms_vals=[];
+  for(var m=40;m<=70;m+=0.5){
+    var r = ov ? parseFloat(document.getElementById('sc-manual-rps').value) : (rpsIntercept+rpsSlope*m);
+    var c2 = ov ? r/parseFloat(document.getElementById('sc-manual-roas').value) : avgCPS;
+    var s2 = dailySpend/c2*7;
+    var rev2 = s2*r;
+    var gm2 = rev2*(m/100);
+    margins.push(m.toFixed(1)+'%');
+    cms_vals.push(Math.round(gm2-spend));
+  }
+  var currentIdx = Math.round((margin*100-40)/0.5);
+
+  if(_scChart) _scChart.destroy();
+  var ctx = document.getElementById('sc-chart');
+  if(ctx) _scChart = new Chart(ctx,{
+    type:'line',
+    data:{
+      labels:margins,
+      datasets:[{
+        data:cms_vals,
+        borderColor:'#3B6D11',
+        backgroundColor:'rgba(59,109,17,.08)',
+        tension:.3,pointRadius:3,pointBackgroundColor:cms_vals.map(function(_,i){return i===currentIdx?'#BA7517':'#3B6D11';}),
+        pointRadius:cms_vals.map(function(_,i){return i===currentIdx?7:2;}),
+      }]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{y:{ticks:{callback:function(v){return v>=1e6?'$'+(v/1e6).toFixed(1)+'M':v>=1e3?'$'+Math.round(v/1e3)+'K':'$'+v;},font:{size:9},color:'#8C7B6B'},grid:{color:'rgba(61,46,34,.07)'}},
+        x:{ticks:{maxTicksLimit:12,font:{size:9},color:'#8C7B6B'},grid:{display:false}}}}
+  });
+
+  // Insights
+  var ins=document.getElementById('sc-insights');
+  if(ins) ins.innerHTML =
+    '<div style="border-left:3px solid var(--amb);padding:4px 10px;margin-bottom:6px">Margin ↑ → RPS ↓: Each +1pp of margin reduces modelled RPS by $'+Math.abs(rpsSlope).toFixed(3)+'. At '+(margin*100).toFixed(1)+'%, estimated RPS is <strong>$'+rps.toFixed(2)+'</strong>.</div>'+
+    '<div style="border-left:3px solid var(--amb);padding:4px 10px">Margin ↑ → ROAS ↓: At '+(margin*100).toFixed(1)+'%, modelled ROAS is <strong>'+roas.toFixed(1)+'x</strong> vs break-even '+breakEvenROAS.toFixed(2)+'x.</div>';
+}
+
+function resetScenario(){
+  // Reset sliders to actuals baseline
+  var actDays=[];
+  DAYS.forEach(function(d){
+    var ua=userAct[d.iso];
+    if(!ua||!ua.net||!ua.sessions||!ua.actualMargin) return;
+    actDays.push({margin:ua.actualMargin,spend:ua.spend||0});
+  });
+  if(actDays.length>0){
+    var avgM=actDays.reduce(function(s,d){return s+d.margin;},0)/actDays.length;
+    var avgSp=actDays.filter(function(d){return d.spend>0;}).reduce(function(s,d){return s+d.spend;},0)/7;
+    document.getElementById('sc-margin').value=Math.round(avgM*1000)/10;
+    document.getElementById('sc-margin-val').textContent=(Math.round(avgM*1000)/10)+'%';
+    document.getElementById('sc-spend').value=Math.round(avgSp/5000)*5000;
+    document.getElementById('sc-spend-val').textContent='$'+Math.round(avgSp/1000)+'K';
+  }
+  document.getElementById('sc-override').checked=false;
+  document.getElementById('sc-override-inputs').style.display='none';
+  updateScenario();
 }
 
 function exportCSV(){

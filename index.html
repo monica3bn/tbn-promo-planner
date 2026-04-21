@@ -155,7 +155,7 @@ header{background:var(--esp);color:#fff;padding:0 1.5rem;display:flex;align-item
 .logo{font-family:'Playfair Display',serif;font-size:14px;letter-spacing:.06em;opacity:.9}
 .logo span{opacity:.4;margin:0 7px}
 .hdr-right{font-size:11px;opacity:.45;text-align:right;line-height:1.5}
-.ann-bar{background:var(--esp);border-top:1px solid rgba(255,255,255,.08);padding:.6rem 1.5rem;display:grid;grid-template-columns:repeat(7,1fr);gap:0;position:sticky;top:50px;z-index:199}
+.ann-bar{background:var(--esp);border-top:1px solid rgba(255,255,255,.08);padding:.6rem 1.5rem;display:grid;grid-template-columns:repeat(8,1fr);gap:0;position:sticky;top:50px;z-index:199}
 .ac{padding:0 .85rem;border-right:1px solid rgba(255,255,255,.1)}
 .ac:first-child{padding-left:0}.ac:last-child{border-right:none}
 .al{font-size:9px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
@@ -277,6 +277,7 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
   <div class="ac"><div class="al">YOY vs 2025</div><div class="av" id="a-yoy">--</div></div>
   <div class="ac"><div class="al">Avg ROAS (YTD)</div><div class="av" id="a-roas">--</div></div>
   <div class="ac"><div class="al">Avg Margin (YTD)</div><div class="av" id="a-margin">--</div></div>
+  <div class="ac"><div class="al">YTD CM$</div><div class="av" id="a-cms">--</div></div>
   <div class="ac"><div class="al">Months on Track</div><div class="av" id="a-track">--</div></div>
 </div>
 <div class="nav">
@@ -345,6 +346,9 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
     <th class="r" style="width:46px">CVR</th>
     <th class="r" style="width:60px">Proj Margin</th><th class="r" style="width:64px">Act Margin</th>
     <th class="r" style="width:68px">Sessions</th>
+    <th class="r" style="width:58px" title="Revenue Per Session">RPS</th>
+    <th class="r" style="width:58px" title="Cost Per Session">CPS</th>
+    <th class="r" style="width:70px" title="Contribution Margin $ = Gross Margin - Ad Spend">CM$</th>
     <th class="r" style="width:70px">Est Returns</th>
     <th class="r" style="width:68px">2025 Net</th>
     <th class="r" style="width:56px">YOY</th>
@@ -389,7 +393,7 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
     <tr class="grp-hdr">
       <th colspan="2"></th>
       <th colspan="2" style="border-left:1px solid var(--bd)">Revenue</th>
-      <th colspan="3" style="border-left:1px solid var(--bd)">Traffic &amp; Conversion</th>
+      <th colspan="5" style="border-left:1px solid var(--bd)">Traffic &amp; Conversion</th>
       <th colspan="2" style="border-left:1px solid var(--bd)">Marketing</th>
       <th style="border-left:1px solid var(--bd)">Margin</th>
       <th colspan="2" style="border-left:1px solid var(--bd)">Customers</th>
@@ -402,6 +406,8 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
       <th class="r" style="width:74px;border-left:1px solid var(--bd)">Sessions</th>
       <th class="r" style="width:64px">Orders</th>
       <th class="r" style="width:52px">CVR</th>
+      <th class="r" style="width:52px">RPS</th>
+      <th class="r" style="width:52px">CPS</th>
       <th class="r" style="width:80px;border-left:1px solid var(--bd)">Ad Spend $</th>
       <th class="r" style="width:52px">ROAS</th>
       <th class="r" style="width:64px;border-left:1px solid var(--bd)">Act Margin %</th>
@@ -735,10 +741,18 @@ function getDayData(iso){
   const thisLiftWeight=(DOW_BASE[day.dow]||{net:0}).net*((LIFT[getEv(day.iso)]||LIFT['None']).lift||1);
   const mGoalForSug=MONTH_GOALS[day.mon]||0;
   const modelSug=totalLiftWeight>0?Math.round(mGoalForSug*(thisLiftWeight/totalLiftWeight)):_rawProjNet;
+  // RPS = Revenue Per Session, CPS = Cost Per Session
+  const effSess=sessions||projSess;
+  const rps=effSess>0?displayNet/effSess:null;
+  const cps=effSess>0&&spend?spend/effSess:null;
+  // CM$ = Gross Margin $ - Ad Spend
+  const grossMarginDollars=displayNet*(actualMargin!=null?actualMargin:projMargin);
+  const cms=spend!=null?grossMarginDollars-spend:null;
   return{...day,goal,evName,ev,isAct,hasCSV,hasUA,modelSug,
     net:displayNet,actualNet:net,projNet,projMargin,actualMargin,
-    sessions:sessions||projSess,
+    sessions:effSess,
     spend,orders,returns,newCust,retCust,margin,cvr,roas,
+    rps,cps,cms,
     diff,fp,estReturns,retRisk,yoy25:y25?.net||null};
 }
 
@@ -751,11 +765,14 @@ const clr=v=>v>0?'#3B6D11':v<0?'#A32D2D':'inherit';
 
 // Annual summary
 function updateAnnual(){
-  let ytd=0,fyP=0,roasN=0,roasD=0,margS=0,margC=0,actD=0;
+  let ytd=0,fyP=0,roasN=0,roasD=0,margS=0,margC=0,actD=0,ytdCMS=0;
   for(const day of DAYS){
     const dd=getDayData(day.iso);if(!dd)continue;
     fyP+=dd.net;
-    if(dd.isAct){ytd+=dd.net;actD++;}
+    if(dd.isAct){
+      ytd+=dd.net;actD++;
+      if(dd.spend!=null){const gm=dd.net*(dd.actualMargin||dd.projMargin);ytdCMS+=gm-dd.spend;}
+    }
     if(dd.spend&&dd.net){roasN+=dd.net;roasD+=dd.net/dd.roas;}
     if(dd.margin){margS+=dd.margin;margC++;}
   }
@@ -774,6 +791,7 @@ function updateAnnual(){
   document.getElementById('a-roas').textContent=roasD>0?(roasN/roasD).toFixed(1)+'x':'--';
   document.getElementById('a-margin').textContent=margC>0?pct(margS/margC):'--';
   document.getElementById('a-track').textContent=onTrack+'/12';
+  const cmsEl=document.getElementById('a-cms');if(cmsEl) cmsEl.textContent=ytdCMS!==0?fK(ytdCMS):'--';
 }
 
 // Overview cards
@@ -846,7 +864,7 @@ function buildPlanner(){
       // Count locked future days for this month
     const mLockedDays=DAYS.filter(d=>d.mon===day.mon&&!ACTUALS_2026[d.iso]&&lockedProj[d.iso]).length;
     const mFutureDays=DAYS.filter(d=>d.mon===day.mon&&!ACTUALS_2026[d.iso]).length;
-    ar.innerHTML=`<td colspan="17" style="padding:0;border:none"><div style="padding:8px 12px 8px;background:var(--esp);display:flex;align-items:center;gap:16px;flex-wrap:wrap;border-bottom:2px solid rgba(255,255,255,.1)">
+    ar.innerHTML=`<td colspan="20" style="padding:0;border:none"><div style="padding:8px 12px 8px;background:var(--esp);display:flex;align-items:center;gap:16px;flex-wrap:wrap;border-bottom:2px solid rgba(255,255,255,.1)">
       <span style="font-family:'Playfair Display',serif;font-size:14px;color:#fff;letter-spacing:.04em;min-width:110px">${MONTH_NAMES[day.mon-1]} 2026</span>
       <span style="font-size:12px;color:rgba(255,255,255,.8)">Goal:
         <input type="number" value="${mGoal}" onchange="setMonthGoal(${day.mon},this.value)"
@@ -883,7 +901,7 @@ function buildPlanner(){
       const wkSun=new Date(wkMon.getFullYear(),wkMon.getMonth(),wkMon.getDate()+6);
       const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
       wkRow=document.createElement('tr');wkRow.className='week-row';
-      wkRow.innerHTML=`<td colspan="6" style="font-size:10px;color:var(--bark);padding:5px 8px;font-weight:500">W${wk} &nbsp;·&nbsp; ${fmt(wkMon)}&ndash;${fmt(wkSun)}</td>
+      wkRow.innerHTML=`<td colspan="9" style="font-size:10px;color:var(--bark);padding:5px 8px;font-weight:500">W${wk} &nbsp;·&nbsp; ${fmt(wkMon)}&ndash;${fmt(wkSun)}</td>
         <td class="r wg" style="font-size:10px;color:var(--bark)">--</td>
         <td class="r wn" style="font-size:11px;font-weight:500">--</td>
         <td class="r wv" style="font-size:11px;font-weight:500">--</td>
@@ -1017,6 +1035,9 @@ function buildPlanner(){
       <td class="r" style="font-size:11px;color:var(--bark)">${pct(dd.projMargin)}</td>
       <td class="r" style="font-size:11px;${dd.actualMargin!=null?'color:var(--forest);font-weight:500':'color:var(--tan)'}">${dd.actualMargin!=null?pct(dd.actualMargin):'—'}</td>
       <td class="r" style="font-size:11px;color:var(--bark)">${fN(dd.sessions)}</td>
+      <td class="r" style="font-size:11px;color:${dd.isAct?'var(--forest)':'var(--bark)'}">${dd.rps!=null?'$'+(dd.rps).toFixed(2):'--'}</td>
+      <td class="r" style="font-size:11px;color:${dd.isAct?'var(--forest)':'var(--bark)'}">${dd.cps!=null?'$'+(dd.cps).toFixed(3):'--'}</td>
+      <td class="r" style="font-size:11px;color:${dd.cms!=null?(dd.cms>0?'var(--forest)':'var(--rose)'):'var(--bark)'};font-weight:${dd.cms!=null?'500':'400'}">${dd.cms!=null?f$(dd.cms):'--'}</td>
       <td class="r" style="color:${retC};font-size:11px">${f$(dd.estReturns)}</td>
       <td class="r muted" style="font-size:11px">${dd.yoy25!=null?f$(dd.yoy25):'--'}</td>
       <td class="r" style="color:${yD!=null?clr(yD):'inherit'};font-size:11px">${yD!=null?(yD>=0?'+':'')+fK(yD):'--'}</td>
@@ -1075,6 +1096,8 @@ function buildActualsTab(filterMon){
       <td class="r" style="border-left:1px solid var(--bd)">${inp('sessions','sessions',72)}</td>
       <td class="r">${inp('orders','orders',62)}</td>
       <td class="r" style="color:var(--forest);font-size:11px">${liveCVR}</td>
+      <td class="r" style="color:var(--forest);font-size:11px">${(()=>{const n=fieldVal('net'),s=fieldVal('sessions');return n&&s?'$'+(n/s).toFixed(2):'--';})()}</td>
+      <td class="r" style="color:var(--forest);font-size:11px">${(()=>{const sp=fieldVal('spend'),s=fieldVal('sessions');return sp&&s?'$'+(sp/s).toFixed(3):'--';})()}</td>
       <td class="r" style="border-left:1px solid var(--bd)">${inp('spend','ad spend',78)}</td>
       <td class="r" style="color:var(--forest);font-size:11px">${liveROAS}</td>
       <td class="r" style="border-left:1px solid var(--bd)">${(()=>{

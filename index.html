@@ -25,18 +25,65 @@
 
   Promise.all([
     import("https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js"),
-    import("https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js")
+    import("https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js"),
+    import("https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js")
   ]).then(function(modules){
     var initializeApp = modules[0].initializeApp;
     var getFirestore = modules[1].getFirestore;
     var doc = modules[1].doc;
     var getDoc = modules[1].getDoc;
     var setDoc = modules[1].setDoc;
+    var getAuth = modules[2].getAuth;
+    var signInWithEmailAndPassword = modules[2].signInWithEmailAndPassword;
+    var signOut = modules[2].signOut;
+    var onAuthStateChanged = modules[2].onAuthStateChanged;
     var onSnapshot = modules[1].onSnapshot;
 
     var fbApp = initializeApp(firebaseConfig);
     var db = getFirestore(fbApp);
+    var auth = getAuth(fbApp);
     var PLAN_REF = doc(db, 'tbn2026', 'planner');
+
+    var ALLOWED_DOMAINS = ['threebirdnest.com', 'growthfactors.com'];
+    function isAllowedEmail(email){
+      return ALLOWED_DOMAINS.some(function(d){return email.toLowerCase().endsWith('@'+d);});
+    }
+    function showLoginError(msg){
+      var el=document.getElementById('login-error');
+      if(el){el.textContent=msg;el.style.display='block';}
+    }
+
+    onAuthStateChanged(auth, function(user){
+      if(user && isAllowedEmail(user.email)){
+        document.getElementById('login-screen').style.display='none';
+        document.getElementById('app-wrapper').style.display='block';
+        var ud=document.getElementById('user-display');
+        if(ud) ud.textContent=user.email;
+        fbLoad();
+      } else {
+        if(user) signOut(auth).then(function(){showLoginError('Only @threebirdnest.com and @growthfactors.com accounts are allowed.');});
+        document.getElementById('login-screen').style.display='flex';
+        document.getElementById('app-wrapper').style.display='none';
+      }
+    });
+
+    window.doLogin=function(){
+      var email=document.getElementById('login-email').value.trim();
+      var password=document.getElementById('login-password').value;
+      var btn=document.getElementById('login-btn');
+      var errEl=document.getElementById('login-error');
+      if(errEl) errEl.style.display='none';
+      if(!email||!password){showLoginError('Please enter email and password.');return;}
+      if(!isAllowedEmail(email)){showLoginError('Only @threebirdnest.com and @growthfactors.com accounts are allowed.');return;}
+      btn.textContent='Signing in...';btn.disabled=true;
+      signInWithEmailAndPassword(auth,email,password).catch(function(e){
+        btn.textContent='Sign In';btn.disabled=false;
+        var msgs={'auth/user-not-found':'No account found for this email.','auth/wrong-password':'Incorrect password.','auth/invalid-email':'Please enter a valid email.','auth/too-many-requests':'Too many attempts. Try again later.','auth/invalid-credential':'Incorrect email or password.'};
+        showLoginError(msgs[e.code]||'Sign in failed. Please try again.');
+      });
+    };
+
+    window.doLogout=function(){signOut(auth);};
 
     // Write to Firestore — called by lsSet
     window.fbSetFn = function(key, val){
@@ -172,6 +219,37 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
 </style>
 </head>
 <body>
+<!-- Login Screen -->
+<div id="login-screen" style="display:flex;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--esp);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:2.5rem 2rem;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="text-align:center;margin-bottom:1.75rem">
+      <div style="font-family:'Playfair Display',serif;font-size:20px;color:var(--esp);letter-spacing:.04em">THREE BIRD NEST</div>
+      <div style="font-size:12px;color:var(--bark);margin-top:4px;letter-spacing:.06em;text-transform:uppercase">2026 Promo Planner</div>
+    </div>
+    <div style="margin-bottom:1rem">
+      <label style="font-size:11px;font-weight:500;color:var(--bark);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:4px">Email</label>
+      <input id="login-email" type="email" placeholder="you@threebirdnest.com"
+        style="width:100%;padding:9px 12px;border:1px solid var(--bd);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif;box-sizing:border-box;outline:none"
+        onfocus="this.style.borderColor='var(--esp)'" onblur="this.style.borderColor='var(--bd)'"
+        onkeydown="if(event.key==='Enter')document.getElementById('login-password').focus()" />
+    </div>
+    <div style="margin-bottom:1.25rem">
+      <label style="font-size:11px;font-weight:500;color:var(--bark);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:4px">Password</label>
+      <input id="login-password" type="password" placeholder="••••••••"
+        style="width:100%;padding:9px 12px;border:1px solid var(--bd);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif;box-sizing:border-box;outline:none"
+        onfocus="this.style.borderColor='var(--esp)'" onblur="this.style.borderColor='var(--bd)'"
+        onkeydown="if(event.key==='Enter')doLogin()" />
+    </div>
+    <div id="login-error" style="display:none;font-size:12px;color:var(--rose);background:#FCEBEB;padding:8px 12px;border-radius:6px;margin-bottom:1rem"></div>
+    <button id="login-btn" onclick="doLogin()"
+      style="width:100%;padding:10px;background:var(--esp);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;letter-spacing:.03em"
+      onmouseover="this.style.opacity='.9'" onmouseout="this.style.opacity='1'">Sign In</button>
+    <div style="font-size:11px;color:var(--bark);text-align:center;margin-top:1rem;opacity:.7">Access restricted to @threebirdnest.com &amp; @growthfactors.com</div>
+  </div>
+</div>
+
+<!-- App (hidden until logged in) -->
+<div id="app-wrapper" style="display:none">
 <header>
   <div><div class="logo">THREE BIRD NEST <span>&middot;</span> 2026 Promo Planner</div></div>
   <div style="display:flex;align-items:center;gap:12px">
@@ -182,8 +260,14 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
     <button onclick="exportXLSX()" style="font-size:11px;padding:5px 11px;border:1px solid rgba(255,255,255,.3);border-radius:4px;background:transparent;color:rgba(255,255,255,.75);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap" onmouseover="this.style.background='rgba(255,255,255,.12)'" onmouseout="this.style.background='transparent'">&#8595; XLSX</button>
     <button onclick="exportData()" style="font-size:11px;padding:5px 11px;border:1px solid rgba(255,255,255,.2);border-radius:4px;background:transparent;color:rgba(255,255,255,.45);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background='transparent'" title="Export full state as JSON (for sending back for recalibration)">&#8595; JSON</button>
   </div>
-    <div class="hdr-right">Annual Goal $45,995,925 &middot; Jan&ndash;Dec 2026<br>Rolling 28-day baselines &middot; Weeks Mon&ndash;Sun &middot; v4 &nbsp;<span id="sync-status" style="font-size:10px;opacity:.7">○ connecting...</span></div>
+    <div style="display:flex;align-items:center;gap:12px">
+    <div class="hdr-right" style="text-align:right">
+      Annual Goal $45,995,925 &middot; Jan&ndash;Dec 2026<br>
+      <span id="user-display" style="opacity:.5;font-size:10px"></span>
+      &nbsp;<button onclick="doLogout()" style="font-size:10px;padding:1px 7px;border:1px solid rgba(255,255,255,.25);border-radius:3px;background:transparent;color:rgba(255,255,255,.5);cursor:pointer;font-family:'DM Sans',sans-serif">Sign out</button>
+      &nbsp;<span id="sync-status" style="font-size:10px;opacity:.7">○ connecting...</span></div>
   </div>
+    </div>
 </header>
 <div class="ann-bar">
   <div class="ac"><div class="al">YTD Actual Net</div><div class="av" id="a-ytd">--</div><div class="asub" id="a-ytd-sub">loading</div></div>
@@ -1859,5 +1943,6 @@ window.addEventListener('resize',setStickyOffset);
   });
 })();
 </script>
+</div>
 </body>
 </html>

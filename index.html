@@ -57,6 +57,7 @@
       if(user && isAllowedEmail(user.email)){
         document.getElementById('login-screen').style.display='none';
         document.getElementById('app-wrapper').style.display='block';
+        setTimeout(function(){if(window.setStickyOffset)setStickyOffset();},100);
         var ud=document.getElementById('user-display');
         if(ud) ud.textContent=user.email;
         fbLoad();
@@ -249,7 +250,7 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
 </div>
 
 <!-- App (hidden until logged in) -->
-<div id="app-wrapper" style="display:none;min-height:100vh">
+<div id="app-wrapper" style="display:none;min-height:100vh;position:relative">
 <header>
   <div><div class="logo">THREE BIRD NEST <span>&middot;</span> 2026 Promo Planner</div></div>
   <div style="display:flex;align-items:center;gap:12px">
@@ -881,15 +882,10 @@ function buildPlanner(){
       const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
       wkRow=document.createElement('tr');wkRow.className='week-row';
       wkRow.innerHTML=`<td colspan="6" style="font-size:10px;color:var(--bark);padding:5px 8px;font-weight:500">W${wk} &nbsp;·&nbsp; ${fmt(wkMon)}&ndash;${fmt(wkSun)}</td>
-        <td class="r" style="font-size:9px;color:var(--bark);opacity:.6;padding-bottom:1px;vertical-align:bottom">WK GOAL</td>
-        <td class="r" style="font-size:9px;color:var(--bark);opacity:.6;padding-bottom:1px;vertical-align:bottom">WK PROJ</td>
-        <td class="r" style="font-size:9px;color:var(--bark);opacity:.6;padding-bottom:1px;vertical-align:bottom">VS GOAL</td>
-        <td class="wa" colspan="7" style="font-size:10px;color:var(--forest);padding-left:12px"></td>
-        </tr><tr class="week-row"><td colspan="6"></td>
-        <td class="r wg" style="font-size:11px;font-weight:500;color:var(--bark)">--</td>
+        <td class="r wg" style="font-size:10px;color:var(--bark)">--</td>
         <td class="r wn" style="font-size:11px;font-weight:500">--</td>
         <td class="r wv" style="font-size:11px;font-weight:500">--</td>
-        <td class="wa" colspan="7" style="font-size:10px;color:var(--forest);padding-left:12px"></td>`;
+        <td class="wa" colspan="9" style="font-size:10px;color:var(--forest);padding-left:12px"></td>`;
       tbody.appendChild(wkRow);
     }
     wkNet+=dd.net;wkGoal+=dd.goal;

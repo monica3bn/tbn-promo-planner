@@ -37,6 +37,7 @@
     var signInWithEmailAndPassword = modules[2].signInWithEmailAndPassword;
     var signOut = modules[2].signOut;
     var onAuthStateChanged = modules[2].onAuthStateChanged;
+    var sendPasswordResetEmail = modules[2].sendPasswordResetEmail;
     var onSnapshot = modules[1].onSnapshot;
 
     var fbApp = initializeApp(firebaseConfig);
@@ -85,6 +86,34 @@
     };
 
     window.doLogout=function(){signOut(auth);};
+
+    window.doResetPassword=function(){
+      var email=document.getElementById('login-email').value.trim();
+      var errEl=document.getElementById('login-error');
+      var resetMsg=document.getElementById('reset-msg');
+      if(errEl) errEl.style.display='none';
+      if(resetMsg) resetMsg.style.display='none';
+      if(!email){
+        showLoginError('Please enter your email address first, then click Forgot Password.');
+        return;
+      }
+      if(!isAllowedEmail(email)){
+        showLoginError('Only @threebirdnest.com and @growthfactors.com accounts are allowed.');
+        return;
+      }
+      sendPasswordResetEmail(auth, email).then(function(){
+        if(resetMsg){
+          resetMsg.textContent='Password reset email sent to '+email+'. Check your inbox.';
+          resetMsg.style.display='block';
+        }
+      }).catch(function(e){
+        var msgs={
+          'auth/user-not-found':'No account found for this email.',
+          'auth/invalid-email':'Please enter a valid email address.'
+        };
+        showLoginError(msgs[e.code]||'Could not send reset email. Please try again.');
+      });
+    };
 
     // Write to Firestore — called by lsSet
     window.fbSetFn = function(key, val){
@@ -248,7 +277,11 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
     <button id="login-btn" onclick="doLogin()"
       style="width:100%;padding:10px;background:var(--esp);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;letter-spacing:.03em"
       onmouseover="this.style.opacity='.9'" onmouseout="this.style.opacity='1'">Sign In</button>
-    <div style="font-size:11px;color:var(--bark);text-align:center;margin-top:1rem;opacity:.7">Access restricted to @threebirdnest.com &amp; @growthfactors.com</div>
+    <div id="reset-msg" style="display:none;font-size:12px;color:var(--forest);background:#EAF3DE;padding:8px 12px;border-radius:6px;margin-top:.75rem;text-align:center"></div>
+    <div style="text-align:center;margin-top:.75rem">
+      <button onclick="doResetPassword()" style="background:none;border:none;color:var(--esp);font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;text-decoration:underline;padding:0">Forgot password?</button>
+    </div>
+    <div style="font-size:11px;color:var(--bark);text-align:center;margin-top:.75rem;opacity:.7">Access restricted to @threebirdnest.com &amp; @growthfactors.com</div>
   </div>
 </div>
 

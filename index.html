@@ -1047,14 +1047,15 @@ function buildPlanner(){
     const wk=day.wkNum;
     if(wk!==curWk){
       flushWk();curWk=wk;wkNet=0;wkGoal=0;wkActNet=0;wkActDays=0;
-      // Calculate week date range
-      const wkMon=getWeekMonday(day.iso);
-      const wkSun=new Date(wkMon.getFullYear(),wkMon.getMonth(),wkMon.getDate()+6);
-      const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
+      // Calculate week date range using actual week days from DAYS array
+      const wkDaysAll=DAYS.filter(d2=>d2.wkNum===wk);
+      const wkFirstIso=wkDaysAll[0]?wkDaysAll[0].iso:day.iso;
+      const wkLastIso=wkDaysAll[wkDaysAll.length-1]?wkDaysAll[wkDaysAll.length-1].iso:day.iso;
+      const fmtIso=iso=>iso.slice(5).replace('-','/');
       wkRow=document.createElement('tr');wkRow.className='week-row';
       const wkSpendVal=weeklySpend[wk]||'';
     const wkSpendDisplay=wkSpendVal?'$'+Math.round(wkSpendVal/1000)+'K planned spend':'';
-    wkRow.innerHTML=`<td colspan="6" style="font-size:10px;color:var(--bark);padding:5px 8px;font-weight:500">W${wk} &nbsp;·&nbsp; ${fmt(wkMon)}&ndash;${fmt(wkSun)}
+    wkRow.innerHTML=`<td colspan="6" style="font-size:10px;color:var(--bark);padding:5px 8px;font-weight:500">W${wk} &nbsp;·&nbsp; ${fmtIso(wkFirstIso)}&ndash;${fmtIso(wkLastIso)}
       <span style="margin-left:10px;font-weight:400;color:var(--bark);opacity:.7">
         Spend: <input type="number" value="${wkSpendVal}" placeholder="planned $"
           onchange="setWeeklySpend(${wk},this.value)"
@@ -1062,7 +1063,10 @@ function buildPlanner(){
           style="width:80px;font-size:10px;padding:1px 4px;border:1px solid var(--bd);border-radius:3px;background:rgba(255,255,255,.8);color:var(--char);font-family:'DM Sans',sans-serif"/>
       </span>
     </td>
-        <td colspan="3" style="font-size:10px;color:var(--bark);text-align:right;padding-right:8px">${wkSpendDisplay?'<span style="color:var(--sky)">'+wkSpendDisplay+'</span>':''}</td>
+        <td colspan="3" style="font-size:10px;color:var(--bark);text-align:right;padding-right:8px">
+      ${wkSpendDisplay?'<span style="color:var(--sky)">'+wkSpendDisplay+'</span>':''}
+      &nbsp;<button onclick="openInScenario(${wk})" style="font-size:10px;padding:1px 8px;border:1px solid var(--bdm);border-radius:3px;background:#fff;color:var(--char);cursor:pointer;font-family:'DM Sans',sans-serif" title="Open this week in Scenario Calculator">&#8594; Scenario</button>
+    </td>
         <td class="r wg" style="font-size:10px;color:var(--bark)">--</td>
         <td class="r wn" style="font-size:11px;font-weight:500">--</td>
         <td class="r wv" style="font-size:11px;font-weight:500">--</td>
@@ -2013,13 +2017,14 @@ function buildScenario(){
     if(!weeks[k]) weeks[k] = {wkNum:d.wkNum, days:[], label:''};
     weeks[k].days.push(d);
   });
-  // Build labels
-  Object.keys(weeks).sort().forEach(function(k){
+  // Build labels — sort days within each week Mon first
+  Object.keys(weeks).sort(function(a,b){return parseInt(a.replace('W',''))-parseInt(b.replace('W',''));}).forEach(function(k){
     var wk = weeks[k];
+    wk.days.sort(function(a,b){return a.iso<b.iso?-1:1;});
     var first = wk.days[0];
     var last = wk.days[wk.days.length-1];
-    var fmt = function(iso){return iso.slice(5).replace('-','/');};
-    wk.label = k + ' · ' + fmt(first.iso) + '–' + fmt(last.iso);
+    var fmtIso2 = function(iso){return iso.slice(5).replace('-','/');};
+    wk.label = k + ' · ' + fmtIso2(first.iso) + '–' + fmtIso2(last.iso);
   });
   var curVal = sel.value;
   sel.innerHTML = Object.keys(weeks).sort().map(function(k){
@@ -2090,6 +2095,19 @@ function updateScenario(){
   if(!selWk) return;
   var wkNum = parseInt(selWk.value.replace('W',''));
   var wkDays = DAYS.filter(function(d){return d.wkNum===wkNum;});
+  // Auto-fill spend slider from weeklySpend if available and not manually set
+  var savedSpend=weeklySpend[wkNum]||weeklySpend[String(wkNum)];
+  if(savedSpend){
+    var spendSlider=document.getElementById('sc-spend');
+    var spendValEl=document.getElementById('sc-spend-val');
+    // Only auto-fill if slider is at default or matches saved
+    var clamped=Math.min(350000,Math.max(50000,Math.round(savedSpend/5000)*5000));
+    if(spendSlider&&parseFloat(spendSlider.value)!==clamped){
+      spendSlider.value=clamped;
+      if(spendValEl) spendValEl.textContent='$'+Math.round(clamped/1000)+'K';
+      spend=clamped;
+    }
+  }
 
   // Compute model RPS from slope
   var actDays = [];
@@ -2220,10 +2238,24 @@ function resetScenario(){
 
 function setWeeklySpend(wkNum, val){
   const n = parseFloat(String(val).replace(/[$,]/g,''));
-  if(isNaN(n) || n <= 0) delete weeklySpend[wkNum];
-  else weeklySpend[wkNum] = n;
+  if(isNaN(n) || n <= 0){delete weeklySpend[wkNum];delete weeklySpend[String(wkNum)];}
+  else{weeklySpend[wkNum]=n;weeklySpend[String(wkNum)]=n;}
   lsSet('ws', weeklySpend);
   buildPlanner();
+  // If scenario tab is open and showing this week, update it
+  if(document.getElementById('tab-scenario').style.display!=='none'){
+    const sel=document.getElementById('sc-week');
+    if(sel&&sel.value==='W'+wkNum){
+      const spendSlider=document.getElementById('sc-spend');
+      const spendVal=document.getElementById('sc-spend-val');
+      if(spendSlider&&n){
+        const clamped=Math.min(350000,Math.max(50000,Math.round(n/5000)*5000));
+        spendSlider.value=clamped;
+        if(spendVal) spendVal.textContent='$'+Math.round(clamped/1000)+'K';
+        updateScenario();
+      }
+    }
+  }
 }
 
 function buildWeeklySummary(){
@@ -2311,6 +2343,52 @@ function buildWeeklySummary(){
       '<td><span style="font-size:10px;padding:1px 7px;border-radius:8px;background:'+statusBg+';color:'+statusColor+'">'+status+'</span></td>';
     tbody.appendChild(tr);
   });
+}
+
+function openInScenario(wkNum){
+  // Switch to scenario tab
+  showTab('scenario');
+  // Wait for tab to render then set the week
+  setTimeout(function(){
+    var sel=document.getElementById('sc-week');
+    if(sel){
+      // Find the option matching this week
+      var opts=Array.from(sel.options);
+      var match=opts.find(function(o){return o.value==='W'+wkNum;});
+      if(match){
+        sel.value=match.value;
+      }
+    }
+    // If there's a planned spend for this week, set the slider
+    var spend=weeklySpend[wkNum]||weeklySpend[String(wkNum)];
+    if(spend){
+      var spendSlider=document.getElementById('sc-spend');
+      var spendVal=document.getElementById('sc-spend-val');
+      if(spendSlider){
+        // Clamp to slider range
+        var clamped=Math.min(350000,Math.max(50000,Math.round(spend/5000)*5000));
+        spendSlider.value=clamped;
+        if(spendVal) spendVal.textContent='$'+Math.round(clamped/1000)+'K';
+      }
+    }
+    // Also set margin from recent actuals avg for this week's days
+    var wkDays=DAYS.filter(function(d){return d.wkNum===wkNum;});
+    var margins=wkDays.map(function(d){
+      var ua=userAct[d.iso];
+      return ua&&ua.actualMargin?ua.actualMargin*100:null;
+    }).filter(Boolean);
+    if(margins.length>0){
+      var avgM=margins.reduce(function(s,m){return s+m;},0)/margins.length;
+      var mSlider=document.getElementById('sc-margin');
+      var mVal=document.getElementById('sc-margin-val');
+      if(mSlider){
+        var clampedM=Math.min(75,Math.max(40,Math.round(avgM*2)/2));
+        mSlider.value=clampedM;
+        if(mVal) mVal.textContent=clampedM.toFixed(1)+'%';
+      }
+    }
+    buildScenario();
+  }, 50);
 }
 
 function exportCSV(){

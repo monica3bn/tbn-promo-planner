@@ -131,6 +131,8 @@
           if(d.ug){userGoals=d.ug;}
           if(d.lp){lockedProj=d.lp;}
           if(d.un){userNotes=d.un;}
+          if(d.umg){userMonthGoals=d.umg;Object.keys(d.umg).forEach(function(m){MONTH_GOALS[parseInt(m)]=d.umg[m];});}
+          if(d.ws){weeklySpend=d.ws;}
           console.log('Loaded from Firestore ✓', Object.keys(d.ua||{}).length, 'actuals');
         } else {
           console.log('No Firestore data yet — will save on first entry');

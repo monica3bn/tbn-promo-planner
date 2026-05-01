@@ -1173,7 +1173,11 @@ function buildPlanner(){
         ${day.iso.slice(5).replace('-','/')}
         ${day.isToday?'<span class="badge badge-today">today</span>':''}
         ${day.special?`<span class="badge badge-sp">${day.special}</span>`:''}
-        ${getNote(day.iso)?`<span class="badge badge-note" title="Click to edit" onclick="promptNote('${day.iso}')">${getNote(day.iso)}</span>`:`<span class="badge" style="background:transparent;border:1px dashed var(--bd);color:var(--bark);opacity:.4;cursor:pointer;font-size:9px" onclick="promptNote('${day.iso}')" title="Add callout">+ note</span>`}
+        ${getNote(day.iso)?`<span class="badge badge-note" 
+          style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle;cursor:pointer"
+          title="${getNote(day.iso).replace(/"/g,'&quot;')} — click to edit"
+          onclick="promptNote('${day.iso}')"
+          >${getNote(day.iso).length>35?getNote(day.iso).slice(0,35)+'…':getNote(day.iso)}</span>`:`<span class="badge" style="background:transparent;border:1px dashed var(--bd);color:var(--bark);opacity:.4;cursor:pointer;font-size:9px" onclick="promptNote('${day.iso}')" title="Add callout">+ note</span>`}
       </td>
       <td class="muted" style="font-size:11px">${day.dow}</td>
       <td>${locked?`<span style="font-size:11px;color:var(--bark)">${dd.evName}</span>`:`<select class="ev" onchange="doSetEv('${day.iso}',this.value)">${opts}</select>`}</td>

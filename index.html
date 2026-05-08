@@ -1991,7 +1991,7 @@ Please provide:
 Be concise and specific. Use markdown headers.`;
 
   try{
-    const resp=await fetch('/.netlify/functions/claude',{
+    const resp=await fetch('/api/claude',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({

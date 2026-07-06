@@ -1187,10 +1187,14 @@ function buildPlanner(){
       ${mActD>0?`<span style="font-size:11px;color:rgba(255,255,255,.7)">${fK(mActNet)} actual (${mActD}d)</span>`:''}
       ${mFutureDays>0?`<span style="font-size:11px;color:rgba(255,255,255,.6)">${mLockedDays}/${mFutureDays} proj locked</span>`:''}
       ${(()=>{
-        const mModelTotal=DAYS.filter(d=>d.mon===day.mon).reduce((s,d)=>{const dd2=getDayData(d.iso);return s+(dd2?dd2.modelSug:0);},0);
-        const gap=mGoal-mModelTotal;
-        if(gap<=0) return '<span style="font-size:11px;color:#8FCA5A">✓ model on track</span>';
-        return '<span style="font-size:10px;background:rgba(240,149,149,.15);color:#F09595;padding:2px 7px;border-radius:10px">⚠ '+fK(gap)+' model gap — see Event Rec column</span>';
+        // Real gap: monthly goal vs projected total (same math as the gap-rec engine)
+        const gap=mGoal-mNet;
+        if(gap<=mGoal*0.02) return '<span style="font-size:11px;color:#8FCA5A">&#10003; on track vs goal</span>';
+        if(mFutureDays===0) return '<span style="font-size:10px;background:rgba(240,149,149,.15);color:#F09595;padding:2px 7px;border-radius:10px">finished '+fK(gap)+' under goal</span>';
+        const pfx=day.iso.slice(0,8);
+        const hasRecs=Object.keys(GAP_RECS).some(iso=>iso.slice(0,8)===pfx);
+        if(hasRecs) return '<span style="font-size:10px;background:rgba(240,149,149,.15);color:#F09595;padding:2px 7px;border-radius:10px">&#9888; '+fK(gap)+' gap — recs in Rec Event column</span>';
+        return '<span style="font-size:10px;background:rgba(240,149,149,.15);color:#F09595;padding:2px 7px;border-radius:10px">&#9888; '+fK(gap)+' gap — no open weekends left; adjust plan or goal</span>';
       })()}
       <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
         <span style="font-size:11px;color:${yoy>=0?'#8FCA5A':'#F09595'}">${yoy>=0?'+':''}${yoy.toFixed(1)}% YOY</span>

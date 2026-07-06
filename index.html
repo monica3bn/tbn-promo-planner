@@ -133,6 +133,7 @@
           if(d.un){userNotes=d.un;}
           if(d.umg){userMonthGoals=d.umg;Object.keys(d.umg).forEach(function(m){MONTH_GOALS[parseInt(m)]=d.umg[m];});}
           if(d.ws){weeklySpend=d.ws;}
+          if(d.ce){customEvents=d.ce;applyCustomEvents();}
           console.log('Loaded from Firestore ✓', Object.keys(d.ua||{}).length, 'actuals');
         } else {
           console.log('No Firestore data yet — will save on first entry');
@@ -161,6 +162,7 @@
       if(d.un) userNotes=d.un;
           if(d.umg){userMonthGoals=d.umg;Object.keys(d.umg).forEach(function(m){MONTH_GOALS[parseInt(m)]=d.umg[m];});}
           if(d.ws) weeklySpend=d.ws;
+      if(d.ce){customEvents=d.ce;applyCustomEvents();buildBenchmarks();}
       try{recalcBaseline();}catch(e){}
       buildOverview();buildPlanner();if(curActTab)buildActualsTab(actFilterMon);
       updateAnnual();if(_chartsBuilt)_updateCharts();
@@ -519,6 +521,7 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:.85rem">
     <div class="notice" style="margin-bottom:0;flex:1">Lift multipliers from historical benchmarks. <span id="lift-status" style="color:var(--forest)"></span></div>
     <button onclick="showRecalibrate()" style="font-size:11px;padding:5px 14px;border:1px solid var(--bdm);border-radius:4px;background:#fff;color:var(--char);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap" onmouseover="this.style.borderColor='var(--esp)'" onmouseout="this.style.borderColor='var(--bdm)'">&#9881; Recalibrate Lifts from Actuals</button>
+    <button onclick="addEventType()" style="font-size:11px;padding:5px 14px;border:1px solid var(--bdm);border-radius:4px;background:#fff;color:var(--char);cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap" onmouseover="this.style.borderColor='var(--esp)'" onmouseout="this.style.borderColor='var(--bdm)'">+ Add Event Type</button>
   </div>
   <div id="recalib-panel" style="display:none;margin-bottom:1rem;border:1px solid var(--bd);border-radius:8px;background:#fff;padding:1rem">
     <div style="font-size:12px;font-weight:500;color:var(--char);margin-bottom:.5rem">Computed lifts from your actuals vs current benchmarks</div>
@@ -836,6 +839,7 @@ let lockedProj=lsGet('lp')||{}; // locked projections — only reset when event 
 let userNotes=lsGet('un')||{};  // custom callout labels per day
 let userMonthGoals=lsGet('umg')||{};
 let weeklySpend=lsGet('ws')||{};  // planned weekly spend keyed by wkNum // user-overridden monthly goals
+let customEvents=lsGet('ce')||{}; // user-created event types {name:{lift,margin,mer,cvr,retRate,marginDelta,isPromo}}
 // Apply saved monthly goals on load
 (function(){Object.keys(userMonthGoals).forEach(function(m){MONTH_GOALS[parseInt(m)]=userMonthGoals[m];});})();
 
@@ -843,6 +847,49 @@ let weeklySpend=lsGet('ws')||{};  // planned weekly spend keyed by wkNum // user
 const PROMO_EVENTS=new Set(['Sitewide 40','Early Access-Sitewide 40','Sitewide 33',
   'Early Access-Sitewide 33','BFCM','Boho Bliss','Sitewide-Tiered','Sale on Sale','PPT',
   'Cat 20% Off','Cat 30% Off','Cat 40% Off']);
+
+// ── Custom (user-created) event types ────────────────────────────────────────
+function applyCustomEvents(){
+  Object.keys(customEvents).forEach(function(name){
+    var c=customEvents[name];
+    LIFT[name]={lift:c.lift,margin:c.margin,mer:c.mer,cvr:c.cvr,retRate:c.retRate,marginDelta:c.marginDelta};
+    DEFAULT_LIFT[name]=JSON.parse(JSON.stringify(LIFT[name]));
+    if(c.isPromo) PROMO_EVENTS.add(name);
+    if(!BAND[name]) BAND[name]='Medium';
+  });
+}
+applyCustomEvents();
+
+function addEventType(){
+  var name=prompt('New event type name (e.g. "Cat 25% Off"):');
+  if(!name) return;
+  name=name.trim();
+  if(!name) return;
+  if(LIFT[name]){alert('"'+name+'" already exists.');return;}
+  var lift=parseFloat(prompt('Starting lift multiplier (1.00 = no lift over BAU):','1.02'));
+  if(isNaN(lift)||lift<=0){alert('Invalid lift — event type not created.');return;}
+  var mPct=parseFloat(prompt('Expected margin % on these days (BAU is 66.4):','62'));
+  if(isNaN(mPct)||mPct<=0||mPct>100){alert('Invalid margin — event type not created.');return;}
+  var margin=mPct/100;
+  var isPromo=confirm('Exclude these days from the rolling BAU baseline?\n\nOK = Yes (recommended for any promo)\nCancel = No (treat like a normal day)');
+  customEvents[name]={lift:lift,margin:margin,mer:4.70,cvr:.0098,retRate:.07,marginDelta:margin-.664,isPromo:isPromo};
+  lsSet('ce',customEvents);
+  applyCustomEvents();
+  recalcBaseline();buildPlanner();buildBenchmarks();buildOverview();updateAnnual();if(_chartsBuilt)_updateCharts();
+  var ls=document.getElementById('lift-status');if(ls)ls.textContent='Added "'+name+'"';
+}
+
+function deleteCustomEvent(name){
+  if(!customEvents[name]) return;
+  var tagged=Object.keys(evSel).filter(function(iso){return evSel[iso]===name;});
+  if(!confirm('Delete "'+name+'"?'+(tagged.length?'\n\n'+tagged.length+' day(s) are tagged with it and will revert to their default event.':''))) return;
+  tagged.forEach(function(iso){delete evSel[iso];});
+  if(tagged.length) lsSet('ev',evSel);
+  delete customEvents[name];lsSet('ce',customEvents);
+  delete LIFT[name];delete DEFAULT_LIFT[name];delete BAND[name];PROMO_EVENTS.delete(name);
+  recalcBaseline();buildPlanner();buildBenchmarks();buildOverview();updateAnnual();if(_chartsBuilt)_updateCharts();
+  var ls=document.getElementById('lift-status');if(ls)ls.textContent='Deleted "'+name+'"';
+}
 
 const HOLIDAY_EV={
   // Memorial Day: EA 5/21 (Thu), SW40 5/22-5/25 (Fri-Mon)
@@ -1417,7 +1464,8 @@ function buildBenchmarks(){
     const band=BAND[name]||'Medium';const rr=ev.retRate<0.08?'Low':ev.retRate<0.11?'Med':'High';const rc={'Low':'#3B6D11','Med':'#BA7517','High':'#A32D2D'};
     const pd=dow=>{const o=DOW_OVR[dow];const l=(o&&o[name]!==undefined)?o[name]:ev.lift;return f$(DOW_BASE[dow].net*l);};
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td style="font-weight:500">${name}</td><td class="r">${ev.lift.toFixed(2)}x</td><td class="r">${pct(ev.margin)}</td><td class="r">${ev.mer.toFixed(2)}x</td><td class="r">${pct(ev.cvr)}</td><td class="r">${pd('Mon')}</td><td class="r">${pd('Fri')}</td><td class="r">${pd('Sat')}</td><td class="r">${pd('Sun')}</td><td class="r" style="color:${rc[rr]};font-weight:500">${rr} (${pct(ev.retRate)})</td><td><span style="font-size:10px;padding:1px 6px;border-radius:8px;font-weight:500;${bc[band]}">${band}</span></td>`;
+    const delBtn=customEvents[name]?` <span onclick="deleteCustomEvent('${name.replace(/'/g,"\\'")}')" style="cursor:pointer;color:#A32D2D;font-size:10px;opacity:.6" title="Delete this custom event type" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.6">&#10005;</span>`:'';
+    tr.innerHTML=`<td style="font-weight:500">${name}${delBtn}</td><td class="r">${ev.lift.toFixed(2)}x</td><td class="r">${pct(ev.margin)}</td><td class="r">${ev.mer.toFixed(2)}x</td><td class="r">${pct(ev.cvr)}</td><td class="r">${pd('Mon')}</td><td class="r">${pd('Fri')}</td><td class="r">${pd('Sat')}</td><td class="r">${pd('Sun')}</td><td class="r" style="color:${rc[rr]};font-weight:500">${rr} (${pct(ev.retRate)})</td><td><span style="font-size:10px;padding:1px 6px;border-radius:8px;font-weight:500;${bc[band]}">${band}</span></td>`;
     tbody.appendChild(tr);
   }
 }
@@ -1721,6 +1769,13 @@ function applySelectedLifts(){
       LIFT[ev].lift=computedLifts[ev].lift;
       if(computedLifts[ev].margin!=null) LIFT[ev].margin=computedLifts[ev].margin;
       if(computedLifts[ev].cvr!=null) LIFT[ev].cvr=computedLifts[ev].cvr;
+      if(customEvents[ev]){ // persist recalibrated values for custom types
+        customEvents[ev].lift=LIFT[ev].lift;
+        customEvents[ev].margin=LIFT[ev].margin;
+        customEvents[ev].cvr=LIFT[ev].cvr;
+        customEvents[ev].marginDelta=LIFT[ev].margin-.664;
+        lsSet('ce',customEvents);
+      }
       applied++;
     }
   });
@@ -1976,7 +2031,7 @@ EVENT TYPE LIFTS:
 - Free Shipping: 1.77x
 - Sitewide 33: 2.80x (33% off full site)
 - Sale on Sale: 1.48x
-- Cat Promo 20/30/40% Off: % off a single category or collection (category noted per day). Blended lift is small (~1.00-1.05x) since only a slice of the catalog is discounted. First measured run (Comfy Pants 30%, Jun 19-21) showed no lift above baseline — treat category promos as margin trades, not revenue drivers, until actuals prove otherwise.
+- Cat Promo 20/30/40% Off: % off a single category or collection (category noted per day). Blended lift is small (~1.00-1.05x) since only a slice of the catalog is discounted. First measured run (Comfy Pants 30%, Jun 19-21) showed no lift above baseline — treat category promos as margin trades, not revenue drivers, until actuals prove otherwise.${Object.keys(customEvents).length?'\n- Custom event types: '+Object.keys(customEvents).map(function(n){return n+' '+LIFT[n].lift.toFixed(2)+'x'}).join(', '):''}
 
 ALREADY PLANNED:
 - Memorial Day: EA 5/21, Sitewide 40 5/22-5/25
@@ -2520,7 +2575,8 @@ function exportData(){
     lp: lsGet('lp')||{},
     un: lsGet('un')||{},
     umg: lsGet('umg')||{},
-    ws: lsGet('ws')||{}
+    ws: lsGet('ws')||{},
+    ce: lsGet('ce')||{}
   };
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
@@ -2540,6 +2596,7 @@ function importData(jsonStr){
     if(d.un) lsSet('un',d.un);
     if(d.umg){lsSet('umg',d.umg);userMonthGoals=d.umg;Object.keys(d.umg).forEach(function(m){MONTH_GOALS[parseInt(m)]=d.umg[m];});}
     if(d.ws){lsSet('ws',d.ws);weeklySpend=d.ws;}
+    if(d.ce){lsSet('ce',d.ce);customEvents=d.ce;applyCustomEvents();}
     // Reload state
     evSel=lsGet('ev')||{};
     userAct=lsGet('ua')||{};

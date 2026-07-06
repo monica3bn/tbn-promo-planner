@@ -1248,7 +1248,18 @@ function buildPlanner(){
         if(PROMO_EVENTS.has(cEv)) return '<span style="font-size:10px;color:var(--forest)">&#10003; '+cEv.replace('Early Access-','EA ').replace('Sitewide','SW').replace(' + New Capsule','+Cap')+'</span>';
         // Week/month context
         const wkDays=DAYS.filter(d=>d.wkNum===day.wkNum);
-        const wkHasSitewide=wkDays.some(d=>getEv(d.iso).includes('Sitewide'));
+        // Only the Fri–Sun block counts as "sitewide planned" — a trailing holiday
+        // Monday (e.g. Labor Day) must not mark the following week as a SW week
+        const wkndDays=wkDays.filter(d=>d.dow==='Fri'||d.dow==='Sat'||d.dow==='Sun');
+        const wkndISOs=new Set(wkndDays.map(d=>d.iso));
+        const wkHasSitewide=wkndDays.some(d=>getEv(d.iso).includes('Sitewide'));
+        // Cooldown: no SW/EA rec within 10 days after any sitewide day outside this weekend block
+        const dayT=Date.parse(day.iso);
+        const swCooldown=DAYS.some(d=>{
+          if(wkndISOs.has(d.iso)) return false;
+          const diff=(dayT-Date.parse(d.iso))/86400000;
+          return diff>0&&diff<=10&&getEv(d.iso).includes('Sitewide')&&!getEv(d.iso).includes('Early Access');
+        });
         const mDays=DAYS.filter(d=>d.mon===day.mon);
         const mPromos=mDays.filter(d=>PROMO_EVENTS.has(getEv(d.iso))).length;
         const promoRatio=mPromos/mDays.length;
@@ -1259,12 +1270,12 @@ function buildPlanner(){
           rec='OOTW + New Capsule';rc='#3B6D11';rb='#EAF3DE';note='standard Mon';
         } else if(dow==='Thu'){
           // Thursday — EA if sitewide weekend coming, otherwise None
-          if(wkHasSitewide){
+          if(wkHasSitewide&&!swCooldown){
             rec='Early Access-Sitewide 40';rc='#185FA5';rb='#E6F1FB';note='EA before SW wknd';
           }
         } else if(dow==='Fri'||dow==='Sat'||dow==='Sun'){
-          // Weekend — Sitewide if already planned this week, otherwise None
-          if(wkHasSitewide){
+          // Weekend — Sitewide if already planned this weekend, otherwise None
+          if(wkHasSitewide&&!swCooldown){
             rec='Sitewide 40';rc='#A32D2D';rb='#FCEBEB';note='SW wknd';
           }
           // Otherwise leave as None — weekends are fine BAU

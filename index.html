@@ -695,13 +695,13 @@ let MONTH_GOALS=Object.assign({},DEFAULT_MONTH_GOALS); // mutable — user can e
 const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
 let DOW_BASE={"Mon":{"net":79782,"sess":77645},"Tue":{"net":72865,"sess":68821},"Wed":{"net":73034,"sess":63809},"Thu":{"net":85548,"sess":67934},"Fri":{"net":140944,"sess":98100},"Sat":{"net":141972,"sess":102354},"Sun":{"net":164314,"sess":93212}}; // BAU-only (promo days excluded)
 let DOW_CVR={"Mon":0.0101,"Tue":0.01,"Wed":0.0103,"Thu":0.0112,"Fri":0.013,"Sat":0.0123,"Sun":0.0135}; // BAU-only actuals
-let LIFT={"None":{lift:1.00,margin:.664,mer:4.64,cvr:.0094,retRate:.06,marginDelta:0},"OOTW":{lift:1.19,margin:.572,mer:5.15,cvr:.0130,retRate:.08,marginDelta:-.092},"New Capsule":{lift:1.00,margin:.620,mer:5.00,cvr:.0120,retRate:.07,marginDelta:-.044},"PPT":{lift:2.20,margin:.569,mer:7.09,cvr:.0201,retRate:.08,marginDelta:-.095},"Boho Bliss":{lift:3.01,margin:.536,mer:8.67,cvr:.0285,retRate:.10,marginDelta:-.128},"Early Access-Sitewide 40":{lift:2.48,margin:.576,mer:10.58,cvr:.0278,retRate:.11,marginDelta:-.088},"Sitewide 40":{lift:4.79,margin:.549,mer:8.49,cvr:.0355,retRate:.14,marginDelta:-.115},"BFCM":{lift:4.44,margin:.536,mer:5.65,cvr:.0401,retRate:.13,marginDelta:-.128},"Free Shipping":{lift:1.77,margin:.606,mer:5.52,cvr:.0211,retRate:.07,marginDelta:-.058},"Sitewide-Tiered":{lift:2.69,margin:.580,mer:8.43,cvr:.0221,retRate:.11,marginDelta:-.084},"Sale on Sale":{lift:1.48,margin:.606,mer:6.34,cvr:.0193,retRate:.10,marginDelta:-.058},"Early Access-Sitewide 33":{lift:1.45,margin:.648,mer:7.74,cvr:.0205,retRate:.09,marginDelta:-.016},"Sitewide 33":{lift:2.80,margin:.604,mer:7.73,cvr:.0274,retRate:.12,marginDelta:-.060},"OOTW + New Capsule":{lift:1.10,margin:.618,mer:5.55,cvr:.0135,retRate:.08,marginDelta:-.046},"Cat Promo L":{lift:1.12,margin:.649,mer:4.85,cvr:.0105,retRate:.07,marginDelta:-.015},"Cat Promo M":{lift:1.05,margin:.657,mer:4.75,cvr:.0100,retRate:.07,marginDelta:-.007},"Cat Promo S":{lift:1.02,margin:.662,mer:4.68,cvr:.0096,retRate:.06,marginDelta:-.002}};
+let LIFT={"None":{lift:1.00,margin:.664,mer:4.64,cvr:.0094,retRate:.06,marginDelta:0},"OOTW":{lift:1.19,margin:.572,mer:5.15,cvr:.0130,retRate:.08,marginDelta:-.092},"New Capsule":{lift:1.00,margin:.620,mer:5.00,cvr:.0120,retRate:.07,marginDelta:-.044},"PPT":{lift:2.20,margin:.569,mer:7.09,cvr:.0201,retRate:.08,marginDelta:-.095},"Boho Bliss":{lift:3.01,margin:.536,mer:8.67,cvr:.0285,retRate:.10,marginDelta:-.128},"Early Access-Sitewide 40":{lift:2.48,margin:.576,mer:10.58,cvr:.0278,retRate:.11,marginDelta:-.088},"Sitewide 40":{lift:4.79,margin:.549,mer:8.49,cvr:.0355,retRate:.14,marginDelta:-.115},"BFCM":{lift:4.44,margin:.536,mer:5.65,cvr:.0401,retRate:.13,marginDelta:-.128},"Free Shipping":{lift:1.77,margin:.606,mer:5.52,cvr:.0211,retRate:.07,marginDelta:-.058},"Sitewide-Tiered":{lift:2.69,margin:.580,mer:8.43,cvr:.0221,retRate:.11,marginDelta:-.084},"Sale on Sale":{lift:1.48,margin:.606,mer:6.34,cvr:.0193,retRate:.10,marginDelta:-.058},"Early Access-Sitewide 33":{lift:1.45,margin:.648,mer:7.74,cvr:.0205,retRate:.09,marginDelta:-.016},"Sitewide 33":{lift:2.80,margin:.604,mer:7.73,cvr:.0274,retRate:.12,marginDelta:-.060},"OOTW + New Capsule":{lift:1.10,margin:.618,mer:5.55,cvr:.0135,retRate:.08,marginDelta:-.046},"Cat 20% Off":{lift:1.00,margin:.630,mer:4.70,cvr:.0098,retRate:.06,marginDelta:-.034},"Cat 30% Off":{lift:1.02,margin:.610,mer:4.75,cvr:.0102,retRate:.07,marginDelta:-.054},"Cat 40% Off":{lift:1.05,margin:.590,mer:4.80,cvr:.0108,retRate:.07,marginDelta:-.074}};
 const DEFAULT_LIFT=JSON.parse(JSON.stringify(LIFT)); // snapshot for reset
 
 // DOW baseline margins from 2026 YTD actuals (more accurate than historical benchmarks)
 let DOW_MARGIN={"Mon":0.61,"Tue":0.621,"Wed":0.62,"Thu":0.618,"Fri":0.599,"Sat":0.592,"Sun":0.588}; // BAU-only actuals
 const DOW_OVR={Mon:{"Sitewide 40":3.25,"BFCM":2.61,"OOTW + New Capsule":0.91},Tue:{"None":0.94,"OOTW + New Capsule":0.58,"PPT":0.71,"Sitewide 40":1.96},Wed:{},Thu:{},Fri:{"None":0.98,"Free Shipping":0.73,"PPT":1.04,"Boho Bliss":1.97,"Sitewide 40":2.21,"BFCM":3.00,"Sitewide-Tiered":1.45},Sat:{"None":0.98,"Free Shipping":0.66,"PPT":0.93,"Boho Bliss":1.49,"Sitewide 40":2.04,"BFCM":1.75,"Sitewide-Tiered":1.04},Sun:{"None":1.00,"Sitewide 40":4.79}};
-const BAND={"None":"High","OOTW":"Medium","New Capsule":"Medium","PPT":"Low","Boho Bliss":"Low","Early Access-Sitewide 40":"Medium","Sitewide 40":"Low","BFCM":"Low","Free Shipping":"Medium","Sitewide-Tiered":"Medium","Sale on Sale":"Medium","Early Access-Sitewide 33":"High","Sitewide 33":"Medium","OOTW + New Capsule":"Medium","Cat Promo L":"High","Cat Promo M":"High","Cat Promo S":"High"};
+const BAND={"None":"High","OOTW":"Medium","New Capsule":"Medium","PPT":"Low","Boho Bliss":"Low","Early Access-Sitewide 40":"Medium","Sitewide 40":"Low","BFCM":"Low","Free Shipping":"Medium","Sitewide-Tiered":"Medium","Sale on Sale":"Medium","Early Access-Sitewide 33":"High","Sitewide 33":"Medium","OOTW + New Capsule":"Medium","Cat 20% Off":"Medium","Cat 30% Off":"Medium","Cat 40% Off":"Medium"};
 
 // Special days — Easter = Apr 3-5 (Fri/Sat/Sun)
 const SPECIAL={
@@ -842,7 +842,7 @@ let weeklySpend=lsGet('ws')||{};  // planned weekly spend keyed by wkNum // user
 // Event types considered promo — excluded from BAU baseline
 const PROMO_EVENTS=new Set(['Sitewide 40','Early Access-Sitewide 40','Sitewide 33',
   'Early Access-Sitewide 33','BFCM','Boho Bliss','Sitewide-Tiered','Sale on Sale','PPT',
-  'Cat Promo L','Cat Promo M','Cat Promo S']);
+  'Cat 20% Off','Cat 30% Off','Cat 40% Off']);
 
 const HOLIDAY_EV={
   // Memorial Day: EA 5/21 (Thu), SW40 5/22-5/25 (Fri-Mon)
@@ -1976,9 +1976,7 @@ EVENT TYPE LIFTS:
 - Free Shipping: 1.77x
 - Sitewide 33: 2.80x (33% off full site)
 - Sale on Sale: 1.48x
-- Cat Promo L: 1.12x (% off a large category — Tops or Bottoms, ~27% of revenue each; category & depth noted per day)
-- Cat Promo M: 1.05x (% off a mid category — Dresses, Jumpsuits, Sweaters, ~5-12% of revenue)
-- Cat Promo S: 1.02x (% off a small category — Jackets, Intimates, Jewelry, Shoes, etc., under ~4% of revenue)
+- Cat Promo 20/30/40% Off: % off a single category or collection (category noted per day). Blended lift is small (~1.00-1.05x) since only a slice of the catalog is discounted. First measured run (Comfy Pants 30%, Jun 19-21) showed no lift above baseline — treat category promos as margin trades, not revenue drivers, until actuals prove otherwise.
 
 ALREADY PLANNED:
 - Memorial Day: EA 5/21, Sitewide 40 5/22-5/25

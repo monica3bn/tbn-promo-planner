@@ -525,7 +525,7 @@ input.ai.filled{border-color:var(--forest);background:var(--flt);color:var(--for
   </div>
   <div id="recalib-panel" style="display:none;margin-bottom:1rem;border:1px solid var(--bd);border-radius:8px;background:#fff;padding:1rem">
     <div style="font-size:12px;font-weight:500;color:var(--char);margin-bottom:.5rem">Computed lifts from your actuals vs current benchmarks</div>
-    <div style="font-size:11px;color:var(--bark);margin-bottom:.75rem">Lift = your actual revenue &divide; the BAU baseline for that DOW. Only event types with 2+ actual days shown. Review before applying.</div>
+    <div style="font-size:11px;color:var(--bark);margin-bottom:.75rem">Lift = your actual revenue &divide; nearby same-weekday BAU actuals (era-matched, so growth over the year doesn't distort old promos). Only event types with 2+ actual days shown. Review before applying.</div>
     <div id="recalib-table"></div>
     <div style="display:flex;gap:8px;margin-top:.75rem">
       <button onclick="applySelectedLifts()" style="font-size:11px;padding:4px 14px;border:1px solid var(--esp);border-radius:4px;background:var(--esp);color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif">Apply Selected</button>
@@ -1684,13 +1684,33 @@ function readXLSX(file){
 let computedLifts={}; // stores computed lifts from actuals {evName: {lift, margin, cvr, n, days}}
 
 function computeLiftsFromActuals(){
+  // Era-matched baselines: each promo day is compared against nearby same-DOW
+  // BAU actuals (nearest 4 within ±45 days), not today's rolling baseline.
+  // Prevents old promo days from being crushed by a baseline that has since grown.
+  const bauByDow={};
+  DAYS.forEach(function(day){
+    const ua=userAct[day.iso];
+    if(!ua||ua.net==null||ua.net<5000) return;
+    if(PROMO_EVENTS.has(getEv(day.iso))) return; // baseline pool = non-promo days, same rule as recalcBaseline
+    (bauByDow[day.dow]=bauByDow[day.dow]||[]).push({t:Date.parse(day.iso),net:ua.net});
+  });
+  function localBase(dow,iso){
+    const list=bauByDow[dow]||[];
+    const t=Date.parse(iso);
+    const near=list.map(function(d){return {dist:Math.abs(d.t-t),net:d.net};})
+      .sort(function(a,b){return a.dist-b.dist;})
+      .filter(function(d){return d.dist<=45*86400000;})
+      .slice(0,4);
+    if(near.length<2) return DOW_BASE[dow]&&DOW_BASE[dow].net; // fallback: current rolling baseline
+    return near.reduce(function(s,v){return s+v.net;},0)/near.length;
+  }
   const byEvent={};
   DAYS.forEach(function(day){
     const ua=userAct[day.iso];
     if(!ua||ua.net==null||ua.net<5000) return;
     const evName=getEv(day.iso);
     if(evName==='None') return; // skip BAU days
-    const bauNet=DOW_BASE[day.dow]&&DOW_BASE[day.dow].net;
+    const bauNet=localBase(day.dow,day.iso);
     if(!bauNet) return;
     const lift=ua.net/bauNet;
     if(lift<0.5||lift>10) return; // sanity check
@@ -1772,7 +1792,7 @@ function applySelectedLifts(){
       if(customEvents[ev]){ // persist recalibrated values for custom types
         customEvents[ev].lift=LIFT[ev].lift;
         customEvents[ev].margin=LIFT[ev].margin;
-        customEvents[ev].cvr=LIFT[ev].cvr;
+        if(LIFT[ev].cvr!=null) customEvents[ev].cvr=LIFT[ev].cvr;
         customEvents[ev].marginDelta=LIFT[ev].margin-.664;
         lsSet('ce',customEvents);
       }

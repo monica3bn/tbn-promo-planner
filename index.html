@@ -1061,9 +1061,78 @@ function buildMonthNav(){
 }
 function scrollToMonth(m){const el=document.getElementById('mo-anchor-'+m);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
 
+
+// ── Gap-aware event recommendations ─────────────────────────────────────────
+// For each future month behind goal, propose levers on open weekends sized to
+// close the gap. Recomputed on every rebuild, so applying a rec shrinks the
+// gap and remaining recs adjust. Proposals only — nothing applies until clicked.
+let GAP_RECS={}; // iso -> {ev, note}
+function computeGapRecs(){
+  GAP_RECS={};
+  const LEVERS=[
+    {ev:'Free Shipping'},
+    {ev:'Sale on Sale'},
+    {ev:'Boho Bliss'},
+    {ev:'Sitewide 33', ea:'Early Access-Sitewide 33'},
+    {ev:'Sitewide 40', ea:'Early Access-Sitewide 40'}
+  ].filter(function(l){return LIFT[l.ev];});
+  const DAY_MS=86400000;
+  // sitewide days already on the calendar (full sitewides, not EA)
+  const swT=DAYS.filter(function(d){
+    const e=getEv(d.iso);return e.includes('Sitewide')&&!e.includes('Early Access');
+  }).map(function(d){return Date.parse(d.iso);});
+  function nearSW(t){return swT.some(function(s){return Math.abs(t-s)<=10*DAY_MS;});}
+  for(let m=1;m<=12;m++){
+    const md=DAYS.filter(function(d){return d.mon===m;});
+    if(!md.length) continue;
+    if(new Date(md[md.length-1].iso.replace(/-/g,'/'))<TODAY) continue; // month over
+    const proj=md.reduce(function(s,d){const dd=getDayData(d.iso);return s+(dd?dd.net:0);},0);
+    let gap=(MONTH_GOALS[m]||0)-proj;
+    if(gap<=(MONTH_GOALS[m]||0)*0.02) continue; // within 2% of goal = on track
+    // candidate weekends: Fri in this month, all Fri-Sun days future + untagged + outside cooldown
+    const fridays=md.filter(function(d){return d.dow==='Fri'&&new Date(d.iso.replace(/-/g,'/'))>=TODAY;});
+    for(const fri of fridays){
+      if(gap<=0) break;
+      const fT=Date.parse(fri.iso);
+      const wknd=DAYS.filter(function(d){
+        const t=Date.parse(d.iso);
+        return t>=fT&&t<=fT+2*DAY_MS&&(d.dow==='Fri'||d.dow==='Sat'||d.dow==='Sun');
+      });
+      if(wknd.length<3) continue;
+      if(wknd.some(function(d){return PROMO_EVENTS.has(getEv(d.iso))||getUA(d.iso).net!=null;})) continue;
+      if(nearSW(fT)||nearSW(fT+2*DAY_MS)) continue;
+      // Thursday before, for EA (optional)
+      const thu=DAYS.find(function(d){return Date.parse(d.iso)===fT-DAY_MS;});
+      const thuFree=thu&&new Date(thu.iso.replace(/-/g,'/'))>=TODAY&&!PROMO_EVENTS.has(getEv(thu.iso))&&getUA(thu.iso).net==null;
+      // score each lever
+      function revFor(lever){
+        let r=wknd.reduce(function(s,d){
+          const cur=getLift(d.dow,getEv(d.iso));
+          return s+(DOW_BASE[d.dow]||{net:0}).net*(getLift(d.dow,lever.ev)-cur);
+        },0);
+        if(lever.ea&&thuFree){
+          const cur=getLift(thu.dow,getEv(thu.iso));
+          r+=(DOW_BASE[thu.dow]||{net:0}).net*(getLift(thu.dow,lever.ea)-cur);
+        }
+        return Math.round(r);
+      }
+      // smallest lever that covers the remaining gap, else the biggest
+      let pick=null,pickRev=0;
+      for(const l of LEVERS){const r=revFor(l);if(r<=0)continue;if(r>=gap){pick=l;pickRev=r;break;}pick=l;pickRev=r;}
+      if(!pick) continue;
+      const label=MONTH_NAMES[m-1].slice(0,3)+' gap';
+      wknd.forEach(function(d){GAP_RECS[d.iso]={ev:pick.ev,note:'closes ~'+fK(pickRev)+' of '+label};});
+      if(pick.ea&&thuFree) GAP_RECS[thu.iso]={ev:pick.ea,note:'EA before gap-closing wknd'};
+      if(pick.ev.includes('Sitewide')){wknd.forEach(function(d){swT.push(Date.parse(d.iso));});}
+      gap-=pickRev;
+    }
+  }
+}
+
 // ── MAIN PLANNER ─────────────────────────────────────────
 function buildPlanner(){
   const tbody=document.getElementById('plan-body');tbody.innerHTML='';
+  try{computeGapRecs();}catch(e){console.warn('gap recs:',e);GAP_RECS={};}
   const evKeys=Object.keys(LIFT);
   let curMon=0,curWk=null,wkNet=0,wkGoal=0,wkActNet=0,wkActDays=0,wkRow=null;
 
@@ -1265,7 +1334,13 @@ function buildPlanner(){
         const promoRatio=mPromos/mDays.length;
         const dow=day.dow;
         let rec=null,rc='',rb='',note='';
-        if(dow==='Mon'){
+        const gr=GAP_RECS[day.iso];
+        if(gr){
+          rec=gr.ev;note=gr.note;
+          if(rec.includes('Early Access')){rc='#185FA5';rb='#E6F1FB';}
+          else if(rec.includes('Sitewide')){rc='#A32D2D';rb='#FCEBEB';}
+          else {rc='#BA7517';rb='#FDF3E0';}
+        } else if(dow==='Mon'){
           // Monday always gets OOTW + New Capsule
           rec='OOTW + New Capsule';rc='#3B6D11';rb='#EAF3DE';note='standard Mon';
         } else if(dow==='Thu'){

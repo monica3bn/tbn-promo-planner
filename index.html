@@ -1973,6 +1973,17 @@ function recalcBaseline(){
     if(d.margin&&d.margin>0.4&&d.margin<0.8) dowMargin[d.dow].push(d.margin);
   });
 
+  // Fallback: DOWs starved of BAU days (constant category promos) get promo
+  // days deflated by their event lift, so the baseline tracks the trend
+  // instead of freezing at its last clean value
+  DOWS.forEach(function(dow){
+    if(dowNet[dow].length>=2) return;
+    last28.filter(function(d){return d.isPromo&&d.dow===dow;}).forEach(function(d){
+      var lf=(LIFT[getEv(d.iso)]||{lift:1}).lift||1;
+      if(lf>=0.5) dowNet[dow].push(Math.round(d.net/lf));
+    });
+  });
+
   // Update globals — only update DOWs that have enough data (2+ days)
   DOWS.forEach(function(dow){
     if(dowNet[dow].length>=2){
@@ -1993,7 +2004,8 @@ function recalcBaseline(){
     var dates=bauDays.map(function(d){return d.iso;}).sort();
     var from=dates[0]?dates[0].slice(5).replace('-','/'):'-';
     var to=dates[dates.length-1]?dates[dates.length-1].slice(5).replace('-','/'):'-';
-    el.textContent='Baseline: '+bauCount+' BAU days ('+from+'–'+to+')';
+    var perDow=DOWS.map(function(dw){return dw.slice(0,2)+' '+dowNet[dw].length;}).join(' · ');
+    el.textContent='Baseline: '+bauCount+' BAU days ('+from+'–'+to+') · days/DOW: '+perDow;
   }
 
   // Clear unlocked projections so they recompute with new baseline
